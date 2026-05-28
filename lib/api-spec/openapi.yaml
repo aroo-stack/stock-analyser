@@ -1,15 +1,18 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Stock Analyser API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: stocks
+    description: Stock analysis operations
+  - name: portfolio
+    description: Portfolio analysis operations
 paths:
   /healthz:
     get:
@@ -24,6 +27,138 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /stocks/{ticker}/history:
+    get:
+      operationId: fetchPriceHistory
+      tags: [stocks]
+      summary: Get historical price data
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: period
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [1mo, 3mo, 6mo, 1y, 3y, 5y]
+            default: 1y
+      responses:
+        "200":
+          description: Historical price data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockHistory"
+        "404":
+          description: Ticker not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /stocks/{ticker}/analysis:
+    get:
+      operationId: fetchStockAnalysis
+      tags: [stocks]
+      summary: Get full stock analysis
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Full stock analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockAnalysis"
+        "404":
+          description: Ticker not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /stocks/picks:
+    get:
+      operationId: getStockPicks
+      tags: [stocks]
+      summary: Get AI-curated stock picks
+      description: Fetches live data on a broad set of stocks and returns AI-selected top picks with rationale
+      responses:
+        "200":
+          description: AI-curated stock picks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StockPick"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /stocks/search:
+    get:
+      operationId: findStocks
+      tags: [stocks]
+      summary: Search for stock tickers
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StockSearchResult"
+
+  /portfolio/analyse:
+    post:
+      operationId: analysePortfolio
+      tags: [portfolio]
+      summary: Analyse a portfolio of holdings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PortfolioRequest"
+      responses:
+        "200":
+          description: Portfolio analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioAnalysis"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +169,559 @@ components:
       required:
         - status
 
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    PricePoint:
+      type: object
+      properties:
+        date:
+          type: string
+        open:
+          type: number
+        high:
+          type: number
+        low:
+          type: number
+        close:
+          type: number
+        volume:
+          type: number
+      required:
+        - date
+        - open
+        - high
+        - low
+        - close
+        - volume
+
+    StockHistory:
+      type: object
+      properties:
+        ticker:
+          type: string
+        prices:
+          type: array
+          items:
+            $ref: "#/components/schemas/PricePoint"
+        ma50:
+          type: array
+          items:
+            $ref: "#/components/schemas/MAPoint"
+        ma200:
+          type: array
+          items:
+            $ref: "#/components/schemas/MAPoint"
+      required:
+        - ticker
+        - prices
+        - ma50
+        - ma200
+
+    MAPoint:
+      type: object
+      properties:
+        date:
+          type: string
+        value:
+          type: ["number", "null"]
+      required:
+        - date
+        - value
+
+    StockOverview:
+      type: object
+      properties:
+        name:
+          type: string
+        ticker:
+          type: string
+        exchange:
+          type: string
+        sector:
+          type: ["string", "null"]
+        industry:
+          type: ["string", "null"]
+        description:
+          type: ["string", "null"]
+        currency:
+          type: string
+        marketCap:
+          type: ["number", "null"]
+        employees:
+          type: ["integer", "null"]
+        website:
+          type: ["string", "null"]
+        country:
+          type: ["string", "null"]
+      required:
+        - name
+        - ticker
+        - exchange
+        - currency
+
+    PricePerformance:
+      type: object
+      properties:
+        currentPrice:
+          type: number
+        previousClose:
+          type: number
+        change1d:
+          type: ["number", "null"]
+        change1dPct:
+          type: ["number", "null"]
+        change1w:
+          type: ["number", "null"]
+        change1wPct:
+          type: ["number", "null"]
+        change1mo:
+          type: ["number", "null"]
+        change1moPct:
+          type: ["number", "null"]
+        change6mo:
+          type: ["number", "null"]
+        change6moPct:
+          type: ["number", "null"]
+        change1y:
+          type: ["number", "null"]
+        change1yPct:
+          type: ["number", "null"]
+        week52High:
+          type: ["number", "null"]
+        week52Low:
+          type: ["number", "null"]
+        indexComparison:
+          type: ["string", "null"]
+        indexPerformance1y:
+          type: ["number", "null"]
+        outperforming:
+          type: ["boolean", "null"]
+      required:
+        - currentPrice
+        - previousClose
+
+    QuantMetrics:
+      type: object
+      properties:
+        pe:
+          type: ["number", "null"]
+        pb:
+          type: ["number", "null"]
+        dividendYield:
+          type: ["number", "null"]
+        beta:
+          type: ["number", "null"]
+        eps:
+          type: ["number", "null"]
+        forwardPE:
+          type: ["number", "null"]
+        priceToSales:
+          type: ["number", "null"]
+        debtToEquity:
+          type: ["number", "null"]
+        returnOnEquity:
+          type: ["number", "null"]
+        profitMargin:
+          type: ["number", "null"]
+        revenueGrowth:
+          type: ["number", "null"]
+        earningsGrowth:
+          type: ["number", "null"]
+        currentRatio:
+          type: ["number", "null"]
+        avgVolume:
+          type: ["number", "null"]
+        currentVolume:
+          type: ["number", "null"]
+        volumeVsAvg:
+          type: ["string", "null"]
+        aboveMA50:
+          type: ["boolean", "null"]
+        aboveMA200:
+          type: ["boolean", "null"]
+        ma50:
+          type: ["number", "null"]
+        ma200:
+          type: ["number", "null"]
+        trendDirection:
+          type: string
+          enum: [uptrend, downtrend, sideways, unknown]
+        analystRating:
+          type: ["string", "null"]
+        targetPrice:
+          type: ["number", "null"]
+        supportLevel:
+          type: ["number", "null"]
+        resistanceLevel:
+          type: ["number", "null"]
+      required:
+        - trendDirection
+
+    GrowthAnalysis:
+      type: object
+      properties:
+        cagr1y:
+          type: ["number", "null"]
+        cagr3y:
+          type: ["number", "null"]
+        cagr5y:
+          type: ["number", "null"]
+        projectedLow:
+          type: ["number", "null"]
+        projectedHigh:
+          type: ["number", "null"]
+        projectionBasis:
+          type: string
+        bullScenario:
+          type: ["string", "null"]
+        bearScenario:
+          type: ["string", "null"]
+      required:
+        - projectionBasis
+
+    SuggestionItem:
+      type: object
+      properties:
+        label:
+          type: string
+        detail:
+          type: string
+      required:
+        - label
+        - detail
+
+    Suggestion:
+      type: object
+      properties:
+        riskProfile:
+          type: string
+          enum: [Aggressive, Moderate, Conservative]
+        view:
+          type: string
+          enum: [Leaning Positive, Neutral, Leaning Negative]
+        reasons:
+          type: array
+          items:
+            $ref: "#/components/schemas/SuggestionItem"
+        investorType:
+          type: array
+          items:
+            type: string
+        disclaimer:
+          type: string
+      required:
+        - riskProfile
+        - view
+        - reasons
+        - investorType
+        - disclaimer
+
+    NewsItem:
+      type: object
+      properties:
+        headline:
+          type: string
+        publisher:
+          type: string
+        url:
+          type: ["string", "null"]
+        publishedAt:
+          type: string
+        sentiment:
+          type: string
+          enum: [Positive, Neutral, Negative]
+        impact:
+          type: string
+      required:
+        - headline
+        - publisher
+        - publishedAt
+        - sentiment
+        - impact
+
+    LiveNewsAnalysis:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/NewsItem"
+        overallSentiment:
+          type: string
+          enum: [Positive, Neutral, Negative]
+        sentimentScore:
+          type: number
+          description: "Numeric score from -5 (very negative) to +5 (very positive)"
+        summary:
+          type: string
+        impactBullets:
+          type: array
+          items:
+            type: string
+          description: "2-4 bullet points explaining how the news affects risk, growth, or valuation"
+      required:
+        - items
+        - overallSentiment
+        - sentimentScore
+        - summary
+        - impactBullets
+
+    SimpleExplanation:
+      type: object
+      properties:
+        whatTheyDo:
+          type: string
+        howItsDoing:
+          type: string
+        whatNewsMeans:
+          type: string
+        whatNumbersMean:
+          type: string
+        whatCouldHappen:
+          type: string
+        whoItMightSuit:
+          type: string
+      required:
+        - whatTheyDo
+        - howItsDoing
+        - whatNewsMeans
+        - whatNumbersMean
+        - whatCouldHappen
+        - whoItMightSuit
+
+    StockAnalysis:
+      type: object
+      properties:
+        overview:
+          $ref: "#/components/schemas/StockOverview"
+        performance:
+          $ref: "#/components/schemas/PricePerformance"
+        quant:
+          $ref: "#/components/schemas/QuantMetrics"
+        growth:
+          $ref: "#/components/schemas/GrowthAnalysis"
+        liveNews:
+          $ref: "#/components/schemas/LiveNewsAnalysis"
+        qualitativeNotes:
+          type: ["string", "null"]
+        suggestion:
+          $ref: "#/components/schemas/Suggestion"
+        simpleExplanation:
+          $ref: "#/components/schemas/SimpleExplanation"
+        generatedAt:
+          type: string
+      required:
+        - overview
+        - performance
+        - quant
+        - growth
+        - liveNews
+        - suggestion
+        - simpleExplanation
+        - generatedAt
+
+    StockPick:
+      type: object
+      properties:
+        ticker:
+          type: string
+        name:
+          type: string
+        sector:
+          type: ["string", "null"]
+        currency:
+          type: string
+        currentPrice:
+          type: number
+        change1dPct:
+          type: ["number", "null"]
+        change1yPct:
+          type: ["number", "null"]
+        trendDirection:
+          type: string
+        analystRating:
+          type: ["string", "null"]
+        targetPrice:
+          type: ["number", "null"]
+        pe:
+          type: ["number", "null"]
+        beta:
+          type: ["number", "null"]
+        rationale:
+          type: string
+        conviction:
+          type: string
+          enum: [High, Medium]
+        category:
+          type: string
+          enum: [Growth, Value, Dividend, Momentum]
+      required:
+        - ticker
+        - name
+        - currency
+        - currentPrice
+        - trendDirection
+        - rationale
+        - conviction
+        - category
+
+    StockSearchResult:
+      type: object
+      properties:
+        ticker:
+          type: string
+        name:
+          type: string
+        exchange:
+          type: ["string", "null"]
+        type:
+          type: ["string", "null"]
+      required:
+        - ticker
+        - name
+
+    PortfolioHolding:
+      type: object
+      properties:
+        ticker:
+          type: string
+        shares:
+          type: ["number", "null"]
+        costBasis:
+          type: ["number", "null"]
+      required:
+        - ticker
+
+    PortfolioRequest:
+      type: object
+      properties:
+        holdings:
+          type: array
+          items:
+            $ref: "#/components/schemas/PortfolioHolding"
+          minItems: 1
+          maxItems: 20
+      required:
+        - holdings
+
+    PortfolioHoldingResult:
+      type: object
+      properties:
+        ticker:
+          type: string
+        name:
+          type: string
+        sector:
+          type: ["string", "null"]
+        currency:
+          type: string
+        shares:
+          type: ["number", "null"]
+        costBasis:
+          type: ["number", "null"]
+        currentPrice:
+          type: number
+        marketValue:
+          type: ["number", "null"]
+        gainLoss:
+          type: ["number", "null"]
+        gainLossPct:
+          type: ["number", "null"]
+        weight:
+          type: number
+        change1dPct:
+          type: ["number", "null"]
+        change1yPct:
+          type: ["number", "null"]
+        trendDirection:
+          type: string
+        analystRating:
+          type: ["string", "null"]
+        targetPrice:
+          type: ["number", "null"]
+        beta:
+          type: ["number", "null"]
+        pe:
+          type: ["number", "null"]
+        error:
+          type: ["string", "null"]
+      required:
+        - ticker
+        - name
+        - currency
+        - currentPrice
+        - weight
+        - trendDirection
+
+    PortfolioTotals:
+      type: object
+      properties:
+        totalValue:
+          type: number
+        totalCost:
+          type: ["number", "null"]
+        totalGainLoss:
+          type: ["number", "null"]
+        totalGainLossPct:
+          type: ["number", "null"]
+        weightedBeta:
+          type: ["number", "null"]
+        weightedPE:
+          type: ["number", "null"]
+        change1dValue:
+          type: ["number", "null"]
+        change1dPct:
+          type: ["number", "null"]
+      required:
+        - totalValue
+
+    SectorAllocation:
+      type: object
+      properties:
+        sector:
+          type: string
+        value:
+          type: number
+        weight:
+          type: number
+      required:
+        - sector
+        - value
+        - weight
+
+    PortfolioAllocation:
+      type: object
+      properties:
+        bySector:
+          type: array
+          items:
+            $ref: "#/components/schemas/SectorAllocation"
+      required:
+        - bySector
+
+    PortfolioAnalysis:
+      type: object
+      properties:
+        holdings:
+          type: array
+          items:
+            $ref: "#/components/schemas/PortfolioHoldingResult"
+        totals:
+          $ref: "#/components/schemas/PortfolioTotals"
+        allocation:
+          $ref: "#/components/schemas/PortfolioAllocation"
+        aiSummary:
+          type: ["string", "null"]
+        generatedAt:
+          type: string
+      required:
+        - holdings
+        - totals
+        - allocation
+        - generatedAt
