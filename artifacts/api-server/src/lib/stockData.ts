@@ -1,8 +1,9 @@
-import yahooFinance from "yahoo-finance2";
+import YahooFinance from "yahoo-finance2";
 import { logger } from "./logger";
 
+// yahoo-finance2 v3: default export is the class — must be instantiated
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const yf: any = yahooFinance;
+const yf = new (YahooFinance as any)();
 
 export interface PricePoint {
   date: string;
@@ -96,7 +97,7 @@ export async function fetchStockHistory(
     period1: from,
     period2: to,
     interval: "1d",
-  });
+  }, { validateResult: false });
 
   if (!historical || historical.length === 0) {
     throw new Error(`No historical data for ${ticker}`);
@@ -122,7 +123,7 @@ export async function fetchStockHistory(
 export async function fetchQuote(ticker: string): Promise<StockQuoteData> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [quoteResult, summaryResult] = await Promise.allSettled<[any, any]>([
-    yf.quote(ticker),
+    yf.quote(ticker, {}, { validateResult: false }),
     yf.quoteSummary(ticker, {
       modules: [
         "assetProfile",
@@ -130,7 +131,7 @@ export async function fetchQuote(ticker: string): Promise<StockQuoteData> {
         "defaultKeyStatistics",
         "summaryDetail",
       ],
-    }),
+    }, { validateResult: false }),
   ]);
 
   if (quoteResult.status === "rejected") {
@@ -204,7 +205,7 @@ export interface RawNewsItem {
 export async function fetchStockNews(ticker: string): Promise<RawNewsItem[]> {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const results: any = await yf.search(ticker, { quotesCount: 0, newsCount: 8 });
+    const results: any = await yf.search(ticker, { quotesCount: 0, newsCount: 8 }, { validateResult: false });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const news: any[] = results?.news ?? [];
     return news.slice(0, 7).map((item) => ({
@@ -227,7 +228,7 @@ export async function searchTickers(
   { ticker: string; name: string; exchange: string | null; type: string | null }[]
 > {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const results: any = await yf.search(query, { quotesCount: 10 });
+  const results: any = await yf.search(query, { quotesCount: 10 }, { validateResult: false });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (results?.quotes ?? []).filter((r: any) => r.symbol && (r.shortname || r.longname)).map((r: any) => ({
     ticker: r.symbol,
