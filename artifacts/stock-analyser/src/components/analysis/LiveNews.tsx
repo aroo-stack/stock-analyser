@@ -25,16 +25,19 @@ interface LiveNewsProps {
 
 const SENTIMENT_CONFIG = {
   Positive: {
+    label: "Good",
     badgeClass: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
     icon: TrendingUp,
     iconClass: "text-emerald-400",
   },
   Neutral: {
+    label: "Neutral",
     badgeClass: "bg-muted/60 text-muted-foreground border-border",
     icon: Minus,
     iconClass: "text-muted-foreground",
   },
   Negative: {
+    label: "Bad",
     badgeClass: "bg-red-500/15 text-red-400 border-red-500/30",
     icon: TrendingDown,
     iconClass: "text-red-400",
@@ -118,7 +121,7 @@ export default function LiveNews({ liveNews }: LiveNewsProps) {
           variant="outline"
           className={`text-xs font-mono ml-4 shrink-0 ${overallConfig.badgeClass}`}
         >
-          {overallSentiment}
+          {overallConfig.label}
         </Badge>
       </div>
 
@@ -204,7 +207,7 @@ export default function LiveNews({ liveNews }: LiveNewsProps) {
                       variant="outline"
                       className={`text-[10px] font-mono shrink-0 px-1.5 py-0 ${config.badgeClass}`}
                     >
-                      {item.sentiment}
+                      {config.label}
                     </Badge>
                   </div>
                   <div className="flex items-center gap-2 mb-1.5">

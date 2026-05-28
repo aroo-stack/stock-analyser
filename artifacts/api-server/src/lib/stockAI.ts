@@ -55,7 +55,11 @@ export async function generateStockAIAnalysis(
   trendDirection: string,
   projectedLow: number | null,
   projectedHigh: number | null,
-  rawNews: RawNewsItem[] = []
+  rawNews: RawNewsItem[] = [],
+  realPriceLow: number | null = null,
+  realPriceHigh: number | null = null,
+  scoreLow: number | null = null,
+  scoreHigh: number | null = null
 ): Promise<AIAnalysisResult> {
   const newsContext =
     rawNews.length > 0
@@ -114,7 +118,10 @@ Growth:
 - CAGR 1Y: ${cagr.cagr1y != null ? cagr.cagr1y.toFixed(2) + "%" : "N/A"}
 - CAGR 3Y: ${cagr.cagr3y != null ? cagr.cagr3y.toFixed(2) + "%" : "N/A"}
 - CAGR 5Y: ${cagr.cagr5y != null ? cagr.cagr5y.toFixed(2) + "%" : "N/A"}
-- Projected 1Y Range: ${projectedLow != null && projectedHigh != null ? projectedLow.toFixed(2) + "% to " + projectedHigh.toFixed(2) + "%" : "N/A"}
+- Projected 1Y Growth Range: ${projectedLow != null && projectedHigh != null ? projectedLow.toFixed(2) + "% to " + projectedHigh.toFixed(2) + "%" : "N/A"}
+- Real-Price Projection (Low): ${realPriceLow != null ? quote.currency + " " + realPriceLow.toFixed(2) : "N/A"} (= current price × (1 + low growth %))
+- Real-Price Projection (High): ${realPriceHigh != null ? quote.currency + " " + realPriceHigh.toFixed(2) : "N/A"} (= current price × (1 + high growth %))
+- Score Projection Range: ${scoreLow != null && scoreHigh != null ? scoreLow.toFixed(1) + " – " + scoreHigh.toFixed(1) + " (out of 100)" : "N/A"}
 
 Financials:
 - Revenue Growth: ${quote.revenueGrowth != null ? (quote.revenueGrowth * 100).toFixed(2) + "%" : "N/A"}
@@ -155,7 +162,7 @@ Respond with ONLY valid JSON in this exact format:
     "howItsDoing": "2-3 sentences describing the stock trend (going up / down / sideways) and how it compares to the overall market. Use plain language like 'over the past year' or 'recently'. Mention rough % if helpful.",
     "whatNewsMeans": "2-3 sentences summarising the latest news in simple terms — what happened, why it matters, and whether it's good, bad, or neutral for the company. Use friendly language like 'This is good news because...' or 'This could be a concern because...'.",
     "whatNumbersMean": "2-3 sentences explaining what the key numbers say in beginner-friendly language. Explain concepts like P/E ('tells us if the stock is expensive or cheap'), momentum, volatility ('how much the price jumps around'). No formulas.",
-    "whatCouldHappen": "2-3 sentences giving a simple balanced view of what might happen next — both the good outcome and the bad. End with something like 'It will depend on earnings, news, and how markets are feeling.'",
+    "whatCouldHappen": "2-3 sentences giving a simple balanced view of what might happen next. MUST include the actual dollar figures: 'If things go badly, it might fall to around ${realPriceLow != null ? quote.currency + " " + realPriceLow.toFixed(2) : "the low estimate"}.' and 'If things go well, it could rise to around ${realPriceHigh != null ? quote.currency + " " + realPriceHigh.toFixed(2) : "the high estimate"}.' Then add: 'These are rough estimates based on past growth — not financial advice. It will depend on earnings, news, and how markets are feeling.'",
     "whoItMightSuit": "1-2 sentences describing what type of person this stock might suit in everyday terms — e.g. 'patient long-term holders', 'people comfortable with ups and downs', 'those looking for steady income'. Not advice."
   },
   "suggestion": {

@@ -374,8 +374,22 @@ components:
           type: ["number", "null"]
         projectedLow:
           type: ["number", "null"]
+          description: "Low-case projected growth rate (%)"
         projectedHigh:
           type: ["number", "null"]
+          description: "High-case projected growth rate (%)"
+        realPriceLow:
+          type: ["number", "null"]
+          description: "Low-case projected price in actual currency (currentPrice × (1 + projectedLow/100))"
+        realPriceHigh:
+          type: ["number", "null"]
+          description: "High-case projected price in actual currency (currentPrice × (1 + projectedHigh/100))"
+        scoreLow:
+          type: ["number", "null"]
+          description: "Normalized score 0-100 for low case (50 + projectedLow/2)"
+        scoreHigh:
+          type: ["number", "null"]
+          description: "Normalized score 0-100 for high case (50 + projectedHigh/2)"
         projectionBasis:
           type: string
         bullScenario:

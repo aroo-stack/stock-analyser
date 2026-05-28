@@ -160,10 +160,36 @@ export interface GrowthAnalysis {
   cagr3y?: number | null;
   /** @nullable */
   cagr5y?: number | null;
-  /** @nullable */
+  /**
+     * Low-case projected growth rate (%)
+     * @nullable
+     */
   projectedLow?: number | null;
-  /** @nullable */
+  /**
+     * High-case projected growth rate (%)
+     * @nullable
+     */
   projectedHigh?: number | null;
+  /**
+     * Low-case projected price in actual currency (currentPrice × (1 + projectedLow/100))
+     * @nullable
+     */
+  realPriceLow?: number | null;
+  /**
+     * High-case projected price in actual currency (currentPrice × (1 + projectedHigh/100))
+     * @nullable
+     */
+  realPriceHigh?: number | null;
+  /**
+     * Normalized score 0-100 for low case (50 + projectedLow/2)
+     * @nullable
+     */
+  scoreLow?: number | null;
+  /**
+     * Normalized score 0-100 for high case (50 + projectedHigh/2)
+     * @nullable
+     */
+  scoreHigh?: number | null;
   projectionBasis: string;
   /** @nullable */
   bullScenario?: string | null;

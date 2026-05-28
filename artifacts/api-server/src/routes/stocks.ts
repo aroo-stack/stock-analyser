@@ -120,6 +120,22 @@ router.get("/stocks/:ticker/analysis", async (req, res): Promise<void> => {
     const projectedLow = baseCagr != null ? Math.round((baseCagr * 0.6) * 100) / 100 : null;
     const projectedHigh = baseCagr != null ? Math.round((baseCagr * 1.4) * 100) / 100 : null;
 
+    // Real-price projections: currentPrice × (1 + growthRate/100)
+    const realPriceLow = projectedLow != null
+      ? Math.round(quote.currentPrice * (1 + projectedLow / 100) * 100) / 100
+      : null;
+    const realPriceHigh = projectedHigh != null
+      ? Math.round(quote.currentPrice * (1 + projectedHigh / 100) * 100) / 100
+      : null;
+
+    // Score projections: normalized 0–100 scale (50 = neutral, ±1 per 2% growth)
+    const scoreLow = projectedLow != null
+      ? Math.round(Math.max(0, Math.min(100, 50 + projectedLow / 2)) * 10) / 10
+      : null;
+    const scoreHigh = projectedHigh != null
+      ? Math.round(Math.max(0, Math.min(100, 50 + projectedHigh / 2)) * 10) / 10
+      : null;
+
     // Support & resistance from 3-month price history (last ~63 trading days)
     const recent3mo = history1y.prices.slice(-63);
     const supportLevel = recent3mo.length > 0
@@ -148,7 +164,11 @@ router.get("/stocks/:ticker/analysis", async (req, res): Promise<void> => {
       trendDirection,
       projectedLow,
       projectedHigh,
-      rawNews
+      rawNews,
+      realPriceLow,
+      realPriceHigh,
+      scoreLow,
+      scoreHigh
     );
 
     const analysis = {
@@ -208,6 +228,10 @@ router.get("/stocks/:ticker/analysis", async (req, res): Promise<void> => {
         ...cagr,
         projectedLow,
         projectedHigh,
+        realPriceLow,
+        realPriceHigh,
+        scoreLow,
+        scoreHigh,
         projectionBasis: "Based on historical CAGR and current momentum",
         bullScenario: aiAnalysis.bullScenario,
         bearScenario: aiAnalysis.bearScenario,
