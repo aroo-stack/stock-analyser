@@ -325,3 +325,25 @@ export function calcCAGR(
     cagr5y: cagr(history5y, 5),
   };
 }
+
+export async function fetchEarningsDate(ticker: string): Promise<{ earningsDate: string | null }> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const summary: any = await yf.quoteSummary(
+      ticker,
+      { modules: ["calendarEvents"] },
+      { validateResult: false }
+    );
+    const earnings = summary?.calendarEvents?.earnings?.earningsDate;
+    if (Array.isArray(earnings) && earnings.length > 0) {
+      const d = earnings[0];
+      if (d instanceof Date) return { earningsDate: d.toISOString() };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const raw = (d as any)?.raw;
+      if (typeof raw === "number") return { earningsDate: new Date(raw * 1000).toISOString() };
+    }
+  } catch (err) {
+    logger.warn({ err, ticker }, "fetchEarningsDate failed");
+  }
+  return { earningsDate: null };
+}

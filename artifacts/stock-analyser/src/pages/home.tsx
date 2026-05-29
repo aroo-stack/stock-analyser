@@ -3,9 +3,10 @@ import { useLocation } from "wouter";
 import {
   Search, TrendingUp, Activity, TerminalSquare, Briefcase,
   Sparkles, TrendingDown, Minus, ArrowRight, RefreshCw,
+  Bookmark, X,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDebounce } from "@/hooks/use-debounce";
@@ -16,6 +17,7 @@ import {
   getGetStockPicksQueryKey,
   type StockPick,
 } from "@workspace/api-client-react";
+import { useWatchlist } from "@/hooks/use-watchlist";
 
 const POPULAR_TICKERS = ["AAPL", "MSFT", "GOOGL", "NVDA", "AMZN", "META", "TSLA"];
 
@@ -100,6 +102,29 @@ function PickCard({ pick, onSelect }: { pick: StockPick; onSelect: (t: string) =
   );
 }
 
+function WatchlistCard({ ticker, onSelect, onRemove }: { ticker: string; onSelect: (t: string) => void; onRemove: (t: string) => void }) {
+  return (
+    <div className="relative group">
+      <button
+        onClick={() => onSelect(ticker)}
+        className="w-full text-left rounded-lg bg-card border border-border hover:border-primary/50 hover:bg-primary/5 transition-all p-3 pr-8"
+      >
+        <p className="font-mono font-bold text-primary text-sm">{ticker}</p>
+        <p className="text-[10px] text-muted-foreground font-mono mt-0.5 flex items-center gap-1">
+          <ArrowRight className="w-2.5 h-2.5" /> Full analysis
+        </p>
+      </button>
+      <button
+        onClick={(e) => { e.stopPropagation(); onRemove(ticker); }}
+        className="absolute top-2 right-2 p-1 rounded text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-red-400 transition-all"
+        title="Remove from watchlist"
+      >
+        <X className="w-3 h-3" />
+      </button>
+    </div>
+  );
+}
+
 function PicksSkeleton() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -127,6 +152,7 @@ export default function Home() {
   const [, setLocation] = useLocation();
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebounce(query, 300);
+  const { watchlist, toggle: toggleWatchlist } = useWatchlist();
 
   const { data: searchResults, isLoading: isSearching } = useFindStocks(
     { q: debouncedQuery },
@@ -146,7 +172,7 @@ export default function Home() {
   } = useGetStockPicks({
     query: {
       queryKey: getGetStockPicksQueryKey(),
-      staleTime: 1000 * 60 * 15, // 15 min cache
+      staleTime: 1000 * 60 * 15,
     },
   });
 
@@ -266,6 +292,42 @@ export default function Home() {
             <Activity className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
           </button>
         </div>
+      </div>
+
+      {/* Watchlist section */}
+      <div className="max-w-5xl mx-auto mb-8">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+            <Bookmark className="w-3.5 h-3.5 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-sm font-mono font-bold uppercase tracking-wider text-white">
+              Your Watchlist
+            </h2>
+            <p className="text-[10px] text-muted-foreground font-mono">
+              Saved instruments
+            </p>
+          </div>
+        </div>
+
+        {watchlist.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border/50 py-6 text-center">
+            <p className="text-sm text-muted-foreground/60 font-mono">
+              No saved stocks yet — bookmark a stock from its analysis page
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            {watchlist.map((t) => (
+              <WatchlistCard
+                key={t}
+                ticker={t}
+                onSelect={handleSelectTicker}
+                onRemove={toggleWatchlist}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* AI Top Picks — full width section */}

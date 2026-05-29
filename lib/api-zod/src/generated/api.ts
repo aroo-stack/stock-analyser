@@ -165,7 +165,9 @@ export const FetchStockAnalysisResponse = zod.object({
   "whatCouldHappen": zod.string(),
   "whoItMightSuit": zod.string()
 }),
-  "generatedAt": zod.string()
+  "generatedAt": zod.string(),
+  "cached": zod.boolean().describe('Whether this response was served from cache'),
+  "cachedAt": zod.string().describe('ISO timestamp of when the analysis was originally generated')
 })
 
 
@@ -207,6 +209,47 @@ export const FindStocksResponseItem = zod.object({
   "type": zod.string().nullish()
 })
 export const FindStocksResponse = zod.array(FindStocksResponseItem)
+
+
+/**
+ * @summary Get next earnings date for a ticker
+ */
+export const GetStockEarningsParams = zod.object({
+  "ticker": zod.coerce.string()
+})
+
+export const GetStockEarningsResponse = zod.object({
+  "earningsDate": zod.string().nullable().describe('ISO 8601 date string of the next earnings date, or null if unknown')
+})
+
+
+/**
+ * @summary Start a new chat conversation
+ */
+export const StartChatBody = zod.object({
+  "ticker": zod.string()
+})
+
+export const StartChatResponse = zod.object({
+  "conversationId": zod.string()
+})
+
+
+/**
+ * @summary Send a message in an existing conversation
+ */
+export const SendChatMessageBody = zod.object({
+  "conversationId": zod.string(),
+  "message": zod.string(),
+  "ticker": zod.string(),
+  "analysisContext": zod.string().nullish(),
+  "teachMeMode": zod.boolean().nullish()
+})
+
+export const SendChatMessageResponse = zod.object({
+  "reply": zod.string(),
+  "conversationId": zod.string()
+})
 
 
 /**

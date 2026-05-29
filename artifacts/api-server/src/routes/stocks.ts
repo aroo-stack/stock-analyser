@@ -7,12 +7,17 @@ import {
   calcTrendDirection,
   calcPerfFromHistory,
   calcCAGR,
+  fetchEarningsDate,
 } from "../lib/stockData";
 import { generateStockAIAnalysis } from "../lib/stockAI";
 import { getAIStockPicks } from "../lib/stockPicks";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
+
+// 15-minute in-memory analysis cache
+const analysisCache = new Map<string, { data: Record<string, unknown>; timestamp: number }>();
+const CACHE_TTL = 15 * 60 * 1000;
 
 // GET /stocks/picks
 router.get("/stocks/picks", async (req, res): Promise<void> => {
@@ -81,6 +86,15 @@ router.get("/stocks/:ticker/analysis", async (req, res): Promise<void> => {
   const ticker = rawTicker?.toUpperCase();
   if (!ticker) {
     res.status(400).json({ error: "Ticker is required" });
+    return;
+  }
+
+  // Check in-memory cache
+  const now = Date.now();
+  const hit = analysisCache.get(ticker);
+  if (hit && now - hit.timestamp < CACHE_TTL) {
+    req.log.info({ ticker }, "Serving analysis from cache");
+    res.json({ ...hit.data, cached: true, cachedAt: new Date(hit.timestamp).toISOString() });
     return;
   }
 
@@ -246,7 +260,10 @@ router.get("/stocks/:ticker/analysis", async (req, res): Promise<void> => {
       generatedAt: new Date().toISOString(),
     };
 
-    res.json(analysis);
+    // Cache and respond
+    const cacheTs = Date.now();
+    analysisCache.set(ticker, { data: analysis as unknown as Record<string, unknown>, timestamp: cacheTs });
+    res.json({ ...analysis, cached: false, cachedAt: new Date(cacheTs).toISOString() });
   } catch (err: any) {
     req.log.error({ ticker, err: err.message }, "Analysis failed");
     if (err.message?.includes("not found") || err.message?.includes("Invalid ticker")) {
@@ -254,6 +271,23 @@ router.get("/stocks/:ticker/analysis", async (req, res): Promise<void> => {
     } else {
       res.status(500).json({ error: "Failed to generate analysis" });
     }
+  }
+});
+
+// GET /stocks/:ticker/earnings
+router.get("/stocks/:ticker/earnings", async (req, res): Promise<void> => {
+  const rawTicker = Array.isArray(req.params.ticker) ? req.params.ticker[0] : req.params.ticker;
+  const ticker = rawTicker?.toUpperCase();
+  if (!ticker) {
+    res.status(400).json({ error: "Ticker is required" });
+    return;
+  }
+  try {
+    const result = await fetchEarningsDate(ticker);
+    res.json(result);
+  } catch (err) {
+    req.log.error({ err, ticker }, "Earnings date fetch failed");
+    res.status(500).json({ error: "Failed to fetch earnings date" });
   }
 });
 

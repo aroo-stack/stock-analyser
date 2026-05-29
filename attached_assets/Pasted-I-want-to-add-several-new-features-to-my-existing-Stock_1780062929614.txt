@@ -1,0 +1,98 @@
+I want to add several new features to my existing Stock Analyser app. The app is a TypeScript pnpm monorepo with a React frontend (artifacts/stock-analyser), an Express API server (artifacts/api-server), and shared libs. It already fetches live stock data from Yahoo Finance and uses OpenAI GPT to generate AI analysis. Please implement the following improvements one at a time, testing each before moving to the next.
+1. Watchlist (save favourite stocks)
+Frontend (artifacts/stock-analyser/src):
+Add a bookmark/heart icon button on the analysis page header, next to the refresh button
+When clicked, save that ticker to a watchlist stored in localStorage under the key stock-watchlist
+If the ticker is already in the watchlist, clicking again removes it (toggle behaviour), and the icon should reflect the saved state visually
+On the home page, add a "Your Watchlist" section above the AI Picks section that shows saved tickers as clickable cards (same style as the existing PickCard component)
+If the watchlist is empty, show a subtle empty state: "No saved stocks yet — bookmark a stock from its analysis page"
+No backend changes needed for this feature.
+2. Stock comparison view
+Frontend (artifacts/stock-analyser/src):
+On the analysis page, add a "Compare" button in the header area
+When clicked, show a search input (same as the home page search) that lets the user pick a second ticker
+Once a second ticker is selected, fetch its analysis using the existing useFetchStockAnalysis hook and display both stocks side by side
+Show the following fields in a comparison table: Current Price, P/E Ratio, Forward P/E, 1Y Change %, Beta, Market Cap, Analyst Rating, Target Price, Revenue Growth, Profit Margin
+Highlight the better value in each row in green and the worse in red (for metrics where lower is better like P/E, use that logic correctly)
+Add a "Clear comparison" button to go back to single stock view
+No backend changes needed for this feature.
+3. Earnings date banner
+Backend (artifacts/api-server/src):
+In stockData.ts, add a new exported function fetchEarningsDate(ticker: string) that uses yahoo-finance2's quoteSummary with the calendarEvents module to get the next earnings date
+Return { earningsDate: string | null } where the date is an ISO string or null if unavailable
+In routes/stocks.ts, add a new route GET /stocks/:ticker/earnings that calls fetchEarningsDate and returns the result
+In lib/api-spec/openapi.yaml, add the new endpoint definition
+Frontend (artifacts/stock-analyser/src):
+In the API client (lib/api-client-react/src/generated), add or regenerate the hook for the new earnings endpoint — or write a simple useQuery fetch manually if regeneration is complex
+On the analysis page, directly below the ticker header and above the Overview component, add a banner that shows:
+If earnings are within 7 days: amber/yellow banner — "⚠ Earnings in X days — [date]"
+If earnings are within 30 days: subtle blue banner — "📅 Earnings on [date]"
+If no earnings date or more than 30 days away: show nothing
+Format the date as a readable string like "12 Jun 2026"
+4. AI analysis caching (15-minute cache)
+Backend (artifacts/api-server/src):
+In routes/stocks.ts, add an in-memory cache (a simple Map) that stores the full analysis response keyed by ticker
+Cache entries should store the result and a timestamp
+When a request comes in for /stocks/:ticker/analysis, check if a cached result exists and is less than 15 minutes old — if so, return it immediately without calling Yahoo Finance or OpenAI
+If the cache is stale or missing, fetch fresh data as normal and store the new result in the cache
+Add a cached: boolean and cachedAt: string field to the analysis response so the frontend can show when data was last fetched
+In the analysis page header, update the timestamp display to show "Live" if not cached, or "Cached · updated X mins ago" if served from cache
+5. Stock Q&A chat (ask the AI about this stock)
+This feature uses the existing conversations and messages database tables already defined in lib/db/src/schema.
+Backend (artifacts/api-server/src):
+Add a new route file routes/chat.ts
+POST /chat/start — creates a new conversation row in the DB, storing the ticker as metadata, and returns { conversationId: string }
+POST /chat/message — accepts { conversationId: string, message: string, ticker: string, analysisContext: string }, saves the user message to the messages table, calls OpenAI with:
+A system prompt: "You are a helpful stock analysis assistant. The user is asking about [ticker]. Here is the current analysis context: [analysisContext]. Answer in plain English, be concise, and always remind the user you are not a financial advisor."
+The full conversation history from the messages table as the messages array
+Returns the assistant reply and saves it to the messages table
+Register the new router in routes/index.ts
+Add the two new endpoints to lib/api-spec/openapi.yaml
+Frontend (artifacts/stock-analyser/src):
+At the very bottom of the analysis page, below the SimpleExplanation component, add a chat panel titled "Ask about [TICKER]"
+Show a text input with a send button and a scrollable message history above it
+On first message, call POST /chat/start to get a conversationId, then store it in React state
+On each message, call POST /chat/message with the conversationId, the user's message, the ticker, and a summary of the current analysis as context (you can stringify the key fields: price, trend, PE, analyst rating, AI suggestion view)
+Display messages in a simple chat bubble layout — user messages right-aligned, assistant messages left-aligned
+Show a loading indicator (spinner) while waiting for the assistant reply
+Suggested starter questions shown as clickable chips before the first message: "Is this stock expensive right now?", "What are the main risks?", "Who is this stock best suited for?"
+General instructions
+Keep all existing functionality working — do not break the current analysis page, home page, stock picks, or portfolio page
+Follow the existing code style: TypeScript strict mode, functional React components with hooks, Tailwind classes matching the existing dark theme
+Use the existing shadcn/ui components already in the project (Card, Badge, Button, Input, Skeleton, Alert etc.)
+For any new API routes, add proper error handling matching the existing pattern (try/catch, logger.error, res.status(500).json)
+Test each feature in the Replit preview before moving to the next one
+Commit with a descriptive message after each feature is working.
+⭐ ADDITIONAL FEATURES TO ADD (these were missing)
+6. Portfolio Simulator (from the original proposal)
+Backend:
+Implement routes using the existing DB schema:
+POST /portfolio/add
+POST /portfolio/remove
+GET /portfolio/summary
+Store: ticker, buy price, quantity, timestamp
+Summary should calculate:
+Current value
+Total gain/loss
+Percentage return
+Allocation % per asset
+Frontend:
+Add a “Portfolio” page
+Allow adding holdings (ticker, buy price, quantity)
+Show gain/loss table
+Add an AI “Portfolio Insights” section using the existing GPT pipeline
+7. Teach‑Me Mode (AI educational mode)
+Frontend:
+Add a toggle switch above the chat panel: “Teach Me Mode”
+When enabled, send a flag to /chat/message
+Backend modifies system prompt to:
+“Explain concepts slowly, simply, and with analogies. Assume the user is a beginner.”
+8. Loading Skeleton Polish
+Frontend:
+Add skeleton loaders for each analysis section
+Sections fade in sequentially (Overview → Metrics → News → AI Summary → Simple Explanation)
+Match existing shadcn/ui styling
+9. Optional: Earnings Calendar (from original suggestion)
+Frontend:
+Add a simple “Earnings Calendar” page listing upcoming earnings for all watchlist tickers
+Use the existing earnings endpoint for each ticker

@@ -275,6 +275,37 @@ export interface SimpleExplanation {
   whoItMightSuit: string;
 }
 
+export interface EarningsDateResult {
+  /**
+     * ISO 8601 date string of the next earnings date, or null if unknown
+     * @nullable
+     */
+  earningsDate: string | null;
+}
+
+export interface ChatStartRequest {
+  ticker: string;
+}
+
+export interface ChatStartResponse {
+  conversationId: string;
+}
+
+export interface ChatMessageRequest {
+  conversationId: string;
+  message: string;
+  ticker: string;
+  /** @nullable */
+  analysisContext?: string | null;
+  /** @nullable */
+  teachMeMode?: boolean | null;
+}
+
+export interface ChatMessageResponse {
+  reply: string;
+  conversationId: string;
+}
+
 export interface StockAnalysis {
   overview: StockOverview;
   performance: PricePerformance;
@@ -286,6 +317,10 @@ export interface StockAnalysis {
   suggestion: Suggestion;
   simpleExplanation: SimpleExplanation;
   generatedAt: string;
+  /** Whether this response was served from cache */
+  cached: boolean;
+  /** ISO timestamp of when the analysis was originally generated */
+  cachedAt: string;
 }
 
 export type StockPickConviction = typeof StockPickConviction[keyof typeof StockPickConviction];

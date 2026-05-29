@@ -21,6 +21,11 @@ import type {
 
 import type {
   ApiError,
+  ChatMessageRequest,
+  ChatMessageResponse,
+  ChatStartRequest,
+  ChatStartResponse,
+  EarningsDateResult,
   FetchPriceHistoryParams,
   FindStocksParams,
   HealthStatus,
@@ -449,6 +454,225 @@ export function useFindStocks<TData = Awaited<ReturnType<typeof findStocks>>, TE
 
 
 
+
+export const getGetStockEarningsUrl = (ticker: string,) => {
+
+
+
+
+  return `/api/stocks/${ticker}/earnings`
+}
+
+/**
+ * @summary Get next earnings date for a ticker
+ */
+export const getStockEarnings = async (ticker: string, options?: RequestInit): Promise<EarningsDateResult> => {
+
+  return customFetch<EarningsDateResult>(getGetStockEarningsUrl(ticker),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStockEarningsQueryKey = (ticker: string,) => {
+    return [
+    `/api/stocks/${ticker}/earnings`
+    ] as const;
+    }
+
+
+export const getGetStockEarningsQueryOptions = <TData = Awaited<ReturnType<typeof getStockEarnings>>, TError = ErrorType<ApiError>>(ticker: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStockEarnings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStockEarningsQueryKey(ticker);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStockEarnings>>> = ({ signal }) => getStockEarnings(ticker, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(ticker), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStockEarnings>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetStockEarningsQueryResult = NonNullable<Awaited<ReturnType<typeof getStockEarnings>>>
+export type GetStockEarningsQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary Get next earnings date for a ticker
+ */
+
+export function useGetStockEarnings<TData = Awaited<ReturnType<typeof getStockEarnings>>, TError = ErrorType<ApiError>>(
+ ticker: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStockEarnings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetStockEarningsQueryOptions(ticker,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getStartChatUrl = () => {
+
+
+
+
+  return `/api/chat/start`
+}
+
+/**
+ * @summary Start a new chat conversation
+ */
+export const startChat = async (chatStartRequest: ChatStartRequest, options?: RequestInit): Promise<ChatStartResponse> => {
+
+  return customFetch<ChatStartResponse>(getStartChatUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      chatStartRequest,)
+  }
+);}
+
+
+
+
+export const getStartChatMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startChat>>, TError,{data: BodyType<ChatStartRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startChat>>, TError,{data: BodyType<ChatStartRequest>}, TContext> => {
+
+const mutationKey = ['startChat'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startChat>>, {data: BodyType<ChatStartRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  startChat(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartChatMutationResult = NonNullable<Awaited<ReturnType<typeof startChat>>>
+    export type StartChatMutationBody = BodyType<ChatStartRequest>
+    export type StartChatMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Start a new chat conversation
+ */
+export const useStartChat = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startChat>>, TError,{data: BodyType<ChatStartRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof startChat>>,
+        TError,
+        {data: BodyType<ChatStartRequest>},
+        TContext
+      > => {
+      return useMutation(getStartChatMutationOptions(options));
+    }
+
+export const getSendChatMessageUrl = () => {
+
+
+
+
+  return `/api/chat/message`
+}
+
+/**
+ * @summary Send a message in an existing conversation
+ */
+export const sendChatMessage = async (chatMessageRequest: ChatMessageRequest, options?: RequestInit): Promise<ChatMessageResponse> => {
+
+  return customFetch<ChatMessageResponse>(getSendChatMessageUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      chatMessageRequest,)
+  }
+);}
+
+
+
+
+export const getSendChatMessageMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendChatMessage>>, TError,{data: BodyType<ChatMessageRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendChatMessage>>, TError,{data: BodyType<ChatMessageRequest>}, TContext> => {
+
+const mutationKey = ['sendChatMessage'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendChatMessage>>, {data: BodyType<ChatMessageRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  sendChatMessage(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SendChatMessageMutationResult = NonNullable<Awaited<ReturnType<typeof sendChatMessage>>>
+    export type SendChatMessageMutationBody = BodyType<ChatMessageRequest>
+    export type SendChatMessageMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Send a message in an existing conversation
+ */
+export const useSendChatMessage = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendChatMessage>>, TError,{data: BodyType<ChatMessageRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof sendChatMessage>>,
+        TError,
+        {data: BodyType<ChatMessageRequest>},
+        TContext
+      > => {
+      return useMutation(getSendChatMessageMutationOptions(options));
+    }
 
 export const getAnalysePortfolioUrl = () => {
 
