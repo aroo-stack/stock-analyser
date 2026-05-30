@@ -679,6 +679,8 @@ components:
         cachedAt:
           type: string
           description: "ISO timestamp of when the analysis was originally generated"
+        bottomLine:
+          $ref: "#/components/schemas/BottomLineResult"
       required:
         - overview
         - performance
@@ -890,3 +892,148 @@ components:
         - totals
         - allocation
         - generatedAt
+
+    BottomLineScores:
+      type: object
+      properties:
+        momentum:
+          type: number
+        valuation:
+          type: number
+        risk:
+          type: number
+        quality:
+          type: number
+      required:
+        - momentum
+        - valuation
+        - risk
+        - quality
+
+    BottomLinePriceTargets:
+      type: object
+      properties:
+        oneMonth:
+          type: ["number", "null"]
+        sixMonths:
+          type: ["number", "null"]
+        oneYear:
+          type: ["number", "null"]
+        oneMonthLow:
+          type: ["number", "null"]
+        oneMonthHigh:
+          type: ["number", "null"]
+        oneYearLow:
+          type: ["number", "null"]
+        oneYearHigh:
+          type: ["number", "null"]
+      required:
+        - oneMonth
+        - sixMonths
+        - oneYear
+        - oneMonthLow
+        - oneMonthHigh
+        - oneYearLow
+        - oneYearHigh
+
+    BottomLineSignals:
+      type: object
+      properties:
+        rsi14:              { type: ["number","null"] }
+        stochasticK:        { type: ["number","null"] }
+        stochasticD:        { type: ["number","null"] }
+        williamsR:          { type: ["number","null"] }
+        macd:
+          type: string
+          enum: ["bullish","bearish","neutral"]
+        macdLine:           { type: ["number","null"] }
+        macdSignalLine:     { type: ["number","null"] }
+        macdHistogram:      { type: ["number","null"] }
+        bollingerUpper:     { type: ["number","null"] }
+        bollingerMiddle:    { type: ["number","null"] }
+        bollingerLower:     { type: ["number","null"] }
+        bollingerPosition:  { type: ["number","null"] }
+        atr14:              { type: ["number","null"] }
+        obv:                { type: ["number","null"] }
+        obvTrend:
+          type: ["string","null"]
+          enum: ["rising","falling","flat",null]
+        roc20:              { type: ["number","null"] }
+        vsMA20:             { type: ["number","null"] }
+        vsMA50:             { type: ["number","null"] }
+        vsMA200:            { type: ["number","null"] }
+        goldenCross:        { type: ["boolean","null"] }
+        ichimokuSignal:
+          type: ["string","null"]
+          enum: ["above_cloud","below_cloud","in_cloud",null]
+        fibLevel:           { type: ["string","null"] }
+        peRatio:            { type: ["number","null"] }
+        forwardPE:          { type: ["number","null"] }
+        pegRatio:           { type: ["number","null"] }
+        pbRatio:            { type: ["number","null"] }
+        psRatio:            { type: ["number","null"] }
+        evToEbitda:         { type: ["number","null"] }
+        earningsYield:      { type: ["number","null"] }
+        dividendYield:      { type: ["number","null"] }
+        grahamNumber:       { type: ["number","null"] }
+        grahamVsCurrent:    { type: ["number","null"] }
+        beta:               { type: ["number","null"] }
+        historicalVolatility30d: { type: ["number","null"] }
+        sharpeRatio:        { type: ["number","null"] }
+        sortinoRatio:       { type: ["number","null"] }
+        maxDrawdown:        { type: ["number","null"] }
+        valueAtRisk95:      { type: ["number","null"] }
+        calmarRatio:        { type: ["number","null"] }
+        returnSkewness:     { type: ["number","null"] }
+        returnKurtosis:     { type: ["number","null"] }
+        fiftyTwoWeekPosition: { type: ["number","null"] }
+        revenueGrowth:      { type: ["number","null"] }
+        profitMargin:       { type: ["number","null"] }
+        returnOnEquity:     { type: ["number","null"] }
+        debtToEquity:       { type: ["number","null"] }
+        currentRatio:       { type: ["number","null"] }
+      required:
+        - macd
+
+    BottomLineResult:
+      type: object
+      properties:
+        verdict:
+          type: string
+          enum: ["Strong Buy","Buy","Hold","Sell","Strong Sell"]
+        verdictColour:
+          type: string
+          enum: ["green","amber","red"]
+        compositeScore:
+          type: number
+        oneLiner:
+          type: string
+        healthStatus:
+          type: string
+          enum: ["Great","Good","Okay","Weak","Poor"]
+        priceTargets:
+          $ref: "#/components/schemas/BottomLinePriceTargets"
+        targetRationale:
+          type: string
+        scores:
+          $ref: "#/components/schemas/BottomLineScores"
+        signals:
+          $ref: "#/components/schemas/BottomLineSignals"
+        methodsUsed:
+          type: array
+          items:
+            type: string
+        disclaimer:
+          type: string
+      required:
+        - verdict
+        - verdictColour
+        - compositeScore
+        - oneLiner
+        - healthStatus
+        - priceTargets
+        - targetRationale
+        - scores
+        - signals
+        - methodsUsed
+        - disclaimer

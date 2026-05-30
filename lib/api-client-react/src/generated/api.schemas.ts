@@ -306,6 +306,204 @@ export interface ChatMessageResponse {
   conversationId: string;
 }
 
+export type BottomLineResultVerdict = typeof BottomLineResultVerdict[keyof typeof BottomLineResultVerdict];
+
+
+export const BottomLineResultVerdict = {
+  Strong_Buy: 'Strong Buy',
+  Buy: 'Buy',
+  Hold: 'Hold',
+  Sell: 'Sell',
+  Strong_Sell: 'Strong Sell',
+} as const;
+
+export type BottomLineResultVerdictColour = typeof BottomLineResultVerdictColour[keyof typeof BottomLineResultVerdictColour];
+
+
+export const BottomLineResultVerdictColour = {
+  green: 'green',
+  amber: 'amber',
+  red: 'red',
+} as const;
+
+export type BottomLineResultHealthStatus = typeof BottomLineResultHealthStatus[keyof typeof BottomLineResultHealthStatus];
+
+
+export const BottomLineResultHealthStatus = {
+  Great: 'Great',
+  Good: 'Good',
+  Okay: 'Okay',
+  Weak: 'Weak',
+  Poor: 'Poor',
+} as const;
+
+export interface BottomLinePriceTargets {
+  /** @nullable */
+  oneMonth: number | null;
+  /** @nullable */
+  sixMonths: number | null;
+  /** @nullable */
+  oneYear: number | null;
+  /** @nullable */
+  oneMonthLow: number | null;
+  /** @nullable */
+  oneMonthHigh: number | null;
+  /** @nullable */
+  oneYearLow: number | null;
+  /** @nullable */
+  oneYearHigh: number | null;
+}
+
+export interface BottomLineScores {
+  momentum: number;
+  valuation: number;
+  risk: number;
+  quality: number;
+}
+
+export type BottomLineSignalsMacd = typeof BottomLineSignalsMacd[keyof typeof BottomLineSignalsMacd];
+
+
+export const BottomLineSignalsMacd = {
+  bullish: 'bullish',
+  bearish: 'bearish',
+  neutral: 'neutral',
+} as const;
+
+/**
+ * @nullable
+ */
+export type BottomLineSignalsObvTrend = typeof BottomLineSignalsObvTrend[keyof typeof BottomLineSignalsObvTrend] | null;
+
+
+export const BottomLineSignalsObvTrend = {
+  rising: 'rising',
+  falling: 'falling',
+  flat: 'flat',
+} as const;
+
+/**
+ * @nullable
+ */
+export type BottomLineSignalsIchimokuSignal = typeof BottomLineSignalsIchimokuSignal[keyof typeof BottomLineSignalsIchimokuSignal] | null;
+
+
+export const BottomLineSignalsIchimokuSignal = {
+  above_cloud: 'above_cloud',
+  below_cloud: 'below_cloud',
+  in_cloud: 'in_cloud',
+} as const;
+
+export interface BottomLineSignals {
+  /** @nullable */
+  rsi14?: number | null;
+  /** @nullable */
+  stochasticK?: number | null;
+  /** @nullable */
+  stochasticD?: number | null;
+  /** @nullable */
+  williamsR?: number | null;
+  macd: BottomLineSignalsMacd;
+  /** @nullable */
+  macdLine?: number | null;
+  /** @nullable */
+  macdSignalLine?: number | null;
+  /** @nullable */
+  macdHistogram?: number | null;
+  /** @nullable */
+  bollingerUpper?: number | null;
+  /** @nullable */
+  bollingerMiddle?: number | null;
+  /** @nullable */
+  bollingerLower?: number | null;
+  /** @nullable */
+  bollingerPosition?: number | null;
+  /** @nullable */
+  atr14?: number | null;
+  /** @nullable */
+  obv?: number | null;
+  /** @nullable */
+  obvTrend?: BottomLineSignalsObvTrend;
+  /** @nullable */
+  roc20?: number | null;
+  /** @nullable */
+  vsMA20?: number | null;
+  /** @nullable */
+  vsMA50?: number | null;
+  /** @nullable */
+  vsMA200?: number | null;
+  /** @nullable */
+  goldenCross?: boolean | null;
+  /** @nullable */
+  ichimokuSignal?: BottomLineSignalsIchimokuSignal;
+  /** @nullable */
+  fibLevel?: string | null;
+  /** @nullable */
+  peRatio?: number | null;
+  /** @nullable */
+  forwardPE?: number | null;
+  /** @nullable */
+  pegRatio?: number | null;
+  /** @nullable */
+  pbRatio?: number | null;
+  /** @nullable */
+  psRatio?: number | null;
+  /** @nullable */
+  evToEbitda?: number | null;
+  /** @nullable */
+  earningsYield?: number | null;
+  /** @nullable */
+  dividendYield?: number | null;
+  /** @nullable */
+  grahamNumber?: number | null;
+  /** @nullable */
+  grahamVsCurrent?: number | null;
+  /** @nullable */
+  beta?: number | null;
+  /** @nullable */
+  historicalVolatility30d?: number | null;
+  /** @nullable */
+  sharpeRatio?: number | null;
+  /** @nullable */
+  sortinoRatio?: number | null;
+  /** @nullable */
+  maxDrawdown?: number | null;
+  /** @nullable */
+  valueAtRisk95?: number | null;
+  /** @nullable */
+  calmarRatio?: number | null;
+  /** @nullable */
+  returnSkewness?: number | null;
+  /** @nullable */
+  returnKurtosis?: number | null;
+  /** @nullable */
+  fiftyTwoWeekPosition?: number | null;
+  /** @nullable */
+  revenueGrowth?: number | null;
+  /** @nullable */
+  profitMargin?: number | null;
+  /** @nullable */
+  returnOnEquity?: number | null;
+  /** @nullable */
+  debtToEquity?: number | null;
+  /** @nullable */
+  currentRatio?: number | null;
+}
+
+export interface BottomLineResult {
+  verdict: BottomLineResultVerdict;
+  verdictColour: BottomLineResultVerdictColour;
+  compositeScore: number;
+  oneLiner: string;
+  healthStatus: BottomLineResultHealthStatus;
+  priceTargets: BottomLinePriceTargets;
+  targetRationale: string;
+  scores: BottomLineScores;
+  signals: BottomLineSignals;
+  methodsUsed: string[];
+  disclaimer: string;
+}
+
 export interface StockAnalysis {
   overview: StockOverview;
   performance: PricePerformance;
@@ -321,6 +519,7 @@ export interface StockAnalysis {
   cached: boolean;
   /** ISO timestamp of when the analysis was originally generated */
   cachedAt: string;
+  bottomLine?: BottomLineResult;
 }
 
 export type StockPickConviction = typeof StockPickConviction[keyof typeof StockPickConviction];

@@ -56,6 +56,8 @@ export interface StockQuoteData {
   targetPrice: number | null;
   ma50: number | null;
   ma200: number | null;
+  bookValuePerShare: number | null;
+  evToEbitda: number | null;
 }
 
 export type Period = "1mo" | "3mo" | "6mo" | "1y" | "3y" | "5y";
@@ -192,6 +194,8 @@ export async function fetchQuote(ticker: string): Promise<StockQuoteData> {
     targetPrice: fd.targetMeanPrice ?? null,
     ma50: q.fiftyDayAverage ?? null,
     ma200: q.twoHundredDayAverage ?? null,
+    bookValuePerShare: ks.bookValue ?? null,
+    evToEbitda: ks.enterpriseToEbitda ?? null,
   };
 }
 

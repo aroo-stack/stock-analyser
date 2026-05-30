@@ -1,0 +1,791 @@
+# Replit Agent Prompt — "Bottom Line" with Layman Summary + Full Quant Backend
+
+Paste this entire prompt into the Replit Agent chat:
+
+---
+
+Add a "Bottom Line" section to the stock analysis page. Place it directly below EarningsBanner and above the existing Overview component.
+
+The section has TWO parts:
+1. **The Layman Card** — dead simple, plain English, no jargon. This is what most users see first.
+2. **The Quant Detail Panel** — collapsed by default, expandable, showing every technical signal and formula used.
+
+All calculations happen entirely in the backend in a new file `bottomLine.ts`. No new npm packages — implement every formula from scratch in pure TypeScript using the price/volume arrays already coming from Yahoo Finance.
+
+---
+
+## PART 1 — BACKEND: `artifacts/api-server/src/lib/bottomLine.ts`
+
+### Full type definition
+
+```typescript
+export interface BottomLineResult {
+  // ── LAYMAN SECTION ──────────────────────────────────────────────
+  verdict: "Strong Buy" | "Buy" | "Hold" | "Sell" | "Strong Sell";
+  verdictColour: "green" | "amber" | "red";
+  compositeScore: number;          // 0–100
+  oneLiner: string;                // e.g. "AAPL is performing well and looks fairly valued with moderate risk."
+  healthStatus: "Great" | "Good" | "Okay" | "Weak" | "Poor";
+  priceTargets: {
+    oneMonth:   number | null;     // median Monte Carlo
+    sixMonths:  number | null;
+    oneYear:    number | null;
+    oneMonthLow:  number | null;   // 10th percentile (bear case)
+    oneMonthHigh: number | null;   // 90th percentile (bull case)
+    oneYearLow:   number | null;
+    oneYearHigh:  number | null;
+  };
+  // plain-English explanation of why the target is what it is
+  targetRationale: string;
+
+  // ── SCORE BREAKDOWN ─────────────────────────────────────────────
+  scores: {
+    momentum:  number;   // 0–100
+    valuation: number;   // 0–100
+    risk:      number;   // 0–100  (100 = safest)
+    quality:   number;   // 0–100
+  };
+
+  // ── ALL RAW SIGNALS ─────────────────────────────────────────────
+  signals: {
+    // Momentum & Technical
+    rsi14:              number | null;
+    stochasticK:        number | null;
+    stochasticD:        number | null;
+    williamsR:          number | null;
+    macd:               "bullish" | "bearish" | "neutral";
+    macdLine:           number | null;
+    macdSignalLine:     number | null;
+    macdHistogram:      number | null;
+    bollingerUpper:     number | null;
+    bollingerMiddle:    number | null;
+    bollingerLower:     number | null;
+    bollingerPosition:  number | null;   // 0–100
+    atr14:              number | null;
+    obv:                number | null;
+    obvTrend:           "rising" | "falling" | "flat" | null;
+    roc20:              number | null;   // 20-day Rate of Change %
+    vsMA20:             number | null;   // % above/below 20-day MA
+    vsMA50:             number | null;
+    vsMA200:            number | null;
+    goldenCross:        boolean | null;  // MA50 > MA200
+    ichimokuSignal:     "above_cloud" | "below_cloud" | "in_cloud" | null;
+    fibLevel:           string | null;   // e.g. "Between 38.2% and 50%"
+    // Valuation
+    peRatio:            number | null;
+    forwardPE:          number | null;
+    pegRatio:           number | null;
+    pbRatio:            number | null;
+    psRatio:            number | null;
+    evToEbitda:         number | null;
+    earningsYield:      number | null;   // (1/PE) × 100
+    dividendYield:      number | null;
+    grahamNumber:       number | null;
+    grahamVsCurrent:    number | null;   // % premium(+) or discount(-) to Graham Number
+    // Risk & Statistics
+    beta:                    number | null;
+    historicalVolatility30d: number | null;   // annualised %
+    sharpeRatio:             number | null;
+    sortinoRatio:            number | null;
+    maxDrawdown:             number | null;   // % from peak (positive number)
+    valueAtRisk95:           number | null;   // daily VaR as % (positive number)
+    calmarRatio:             number | null;
+    returnSkewness:          number | null;
+    returnKurtosis:          number | null;   // excess kurtosis
+    fiftyTwoWeekPosition:    number | null;   // 0–100%, where in 52w range
+    // Quality / Fundamentals
+    revenueGrowth:    number | null;   // YoY %
+    profitMargin:     number | null;
+    returnOnEquity:   number | null;
+    debtToEquity:     number | null;
+    currentRatio:     number | null;
+  };
+
+  // which price target methods were available
+  methodsUsed: string[];
+  disclaimer: string;
+}
+```
+
+---
+
+### FORMULA IMPLEMENTATIONS — implement every single one of these in pure TypeScript
+
+#### Helper: EMA
+```
+multiplier = 2 / (period + 1)
+ema[0] = prices[0]
+ema[i] = (prices[i] - ema[i-1]) × multiplier + ema[i-1]
+Return array of EMA values
+```
+
+#### Helper: SMA
+```
+For each position i >= period-1:
+  sma[i] = average of prices[i-period+1 .. i]
+```
+
+#### Helper: Standard Deviation (population)
+```
+mean = sum(values) / n
+variance = sum((v - mean)^2) / n
+stdDev = sqrt(variance)
+```
+
+#### RSI (14-period Wilder)
+```
+Compute daily changes: change[i] = close[i] - close[i-1]
+gains[i] = max(change[i], 0)
+losses[i] = max(-change[i], 0)
+Seed: avgGain = mean(gains[1..14]), avgLoss = mean(losses[1..14])
+For i > 14:
+  avgGain = (avgGain × 13 + gains[i]) / 14
+  avgLoss = (avgLoss × 13 + losses[i]) / 14
+RS = avgGain / avgLoss  (guard divide-by-zero: if avgLoss = 0, RSI = 100)
+RSI = 100 - (100 / (1 + RS))
+Return final RSI value. Need at least 15 data points.
+```
+
+#### Stochastic Oscillator (14-period, 3-period %D)
+```
+For each i >= 13:
+  high14 = max of close[i-13..i]   (use close as proxy for high if no OHLC)
+  low14  = min of close[i-13..i]
+  %K[i]  = 100 × (close[i] - low14) / (high14 - low14)
+  Guard: if high14 = low14, %K = 50
+%D = 3-period SMA of %K
+Return final %K and %D values.
+```
+
+#### Williams %R (14-period)
+```
+high14 = max(close[last 14])
+low14  = min(close[last 14])
+%R = (high14 - currentClose) / (high14 - low14) × -100
+Guard: if high14 = low14, return -50
+Range -100 to 0. Below -80 = oversold, above -20 = overbought.
+```
+
+#### MACD (12, 26, 9)
+```
+ema12 = EMA(closes, 12)
+ema26 = EMA(closes, 26)
+macdLine[i] = ema12[i] - ema26[i]  (only where both exist)
+signalLine = EMA(macdLine, 9)
+histogram = macdLine - signalLine (final values)
+Classify:
+  "bullish"  if macdLine > signalLine AND histogram > 0
+  "bearish"  if macdLine < signalLine AND histogram < 0
+  "neutral"  otherwise
+Need at least 35 data points.
+```
+
+#### Bollinger Bands (20-period, 2σ)
+```
+middle = SMA(closes, 20)   — use last 20 closes
+stdDev = population stdDev of last 20 closes
+upper  = middle + 2 × stdDev
+lower  = middle - 2 × stdDev
+position = (currentPrice - lower) / (upper - lower) × 100
+Guard: if upper = lower, position = 50
+```
+
+#### ATR (14-period Wilder, close-only approximation)
+```
+tr[i] = abs(close[i] - close[i-1])
+Wilder smoothing (same as RSI):
+  atr[13] = mean(tr[0..13])
+  atr[i]  = (atr[i-1] × 13 + tr[i]) / 14
+Return final ATR value.
+```
+
+#### OBV
+```
+obv = 0
+For i from 1 to n-1:
+  if close[i] > close[i-1]: obv += volume[i]
+  if close[i] < close[i-1]: obv -= volume[i]
+  (equal: no change)
+obvTrend: compare average OBV last 5 days vs average OBV 10–20 days ago
+  rising if recent avg > older avg by > 1%
+  falling if recent avg < older avg by > 1%
+  flat otherwise
+```
+
+#### ROC (20-period)
+```
+roc20 = (close[last] - close[last-20]) / close[last-20] × 100
+Need at least 21 data points.
+```
+
+#### Moving Averages vs Price
+```
+ma20  = SMA(last 20 closes)
+ma50  = SMA(last 50 closes)
+ma200 = SMA(last 200 closes)
+vsMA20  = (currentPrice - ma20)  / ma20  × 100
+vsMA50  = (currentPrice - ma50)  / ma50  × 100
+vsMA200 = (currentPrice - ma200) / ma200 × 100
+goldenCross = ma50 > ma200   (true = bullish, false = death cross)
+```
+
+#### Fibonacci Retracement
+```
+high = fiftyTwoWeekHigh
+low  = fiftyTwoWeekLow
+levels = {
+  "0%":    high,
+  "23.6%": high - 0.236 × (high - low),
+  "38.2%": high - 0.382 × (high - low),
+  "50%":   high - 0.500 × (high - low),
+  "61.8%": high - 0.618 × (high - low),
+  "78.6%": high - 0.786 × (high - low),
+  "100%":  low,
+}
+Find which two adjacent levels the current price falls between.
+Return e.g. "Between 38.2% and 50% retracement"
+If price > high: "Above 52-week high"
+If price < low:  "Below 52-week low"
+```
+
+#### Ichimoku Cloud
+```
+tenkanSen  = (max(close, 9)  + min(close, 9))  / 2
+kijunSen   = (max(close, 26) + min(close, 26)) / 2
+senkouA    = (tenkanSen + kijunSen) / 2
+senkouB    = (max(close, 52) + min(close, 52)) / 2
+cloudTop    = max(senkouA, senkouB)
+cloudBottom = min(senkouA, senkouB)
+Signal:
+  "above_cloud" if currentPrice > cloudTop
+  "below_cloud" if currentPrice < cloudBottom
+  "in_cloud"    otherwise
+Need at least 52 data points.
+```
+
+#### Graham Number
+```
+Only compute if eps > 0 AND bookValuePerShare > 0:
+  grahamNumber = sqrt(22.5 × eps × bookValuePerShare)
+  grahamVsCurrent = (grahamNumber - currentPrice) / currentPrice × 100
+    (negative = stock is above Graham Number = expensive by this metric)
+    (positive = stock is below Graham Number = potentially undervalued)
+```
+
+#### Earnings Yield
+```
+earningsYield = (1 / peRatio) × 100
+```
+
+#### Historical Volatility (30-day, annualised)
+```
+logReturns[i] = ln(close[i] / close[i-1])
+Use last 30 logReturns
+vol = stdDev(logReturns) × sqrt(252) × 100
+```
+
+#### Sharpe Ratio (annualised, risk-free = 4.5%)
+```
+dailyRF = 0.045 / 252
+logReturns = ln(close[i]/close[i-1]) for last 252 days
+excessReturns[i] = logReturn[i] - dailyRF
+sharpe = mean(excessReturns) / stdDev(excessReturns) × sqrt(252)
+Guard: if stdDev = 0, return null
+```
+
+#### Sortino Ratio
+```
+Same excessReturns as Sharpe
+downsideReturns = excessReturns where value < 0
+downsideDeviation = stdDev(downsideReturns) × sqrt(252)
+sortino = mean(excessReturns) × sqrt(252) / downsideDeviation
+Guard: if downsideDeviation = 0, return null
+```
+
+#### Maximum Drawdown
+```
+peak = close[0]
+maxDD = 0
+For each close:
+  if close > peak: peak = close
+  dd = (peak - close) / peak
+  if dd > maxDD: maxDD = dd
+Return maxDD × 100  (as positive percentage)
+```
+
+#### Value at Risk (Historical Simulation, 95%)
+```
+logReturns = last 252 daily log returns, sorted ascending
+VaR95 = abs(logReturns[floor(0.05 × n)]) × 100
+This is the daily loss exceeded only 5% of days historically.
+```
+
+#### Calmar Ratio
+```
+annualisedReturn = (close[last] / close[0])^(252 / n) - 1
+calmar = annualisedReturn / (maxDrawdown / 100)
+Guard: maxDrawdown = 0 → return null
+```
+
+#### Skewness (sample)
+```
+n = length, mean = mean(returns), s = stdDev(returns)
+skewness = (n / ((n-1)(n-2))) × Σ((r - mean)/s)^3
+```
+
+#### Excess Kurtosis (sample)
+```
+kurtosis = [n(n+1)/((n-1)(n-2)(n-3))] × Σ((r-mean)/s)^4
+           - 3(n-1)^2/((n-2)(n-3))
+Normal distribution = 0. Positive = fat tails.
+```
+
+---
+
+### PRICE TARGET METHODS — implement all four, weighted average
+
+#### Method 1: Monte Carlo Geometric Brownian Motion (weight 30%)
+```
+Inputs: logReturns from last 252 days
+drift = mean(logReturns)
+vol   = stdDev(logReturns)
+
+Box-Muller normal random:
+  u1 = Math.random(), u2 = Math.random()
+  z  = sqrt(-2 × ln(u1)) × cos(2π × u2)
+
+Run 10,000 paths:
+  For each path, simulate N trading days:
+    price[0] = currentPrice
+    price[t] = price[t-1] × exp((drift - 0.5 × vol²) + vol × z)
+
+N = 21  for 1 month
+N = 126 for 6 months
+N = 252 for 1 year
+
+From 10,000 final prices, sort and take:
+  median (50th pct) = main target
+  10th pct          = bear case (low)
+  90th pct          = bull case (high)
+```
+
+#### Method 2: Analyst Consensus Interpolation (weight 25%)
+```
+If analystTargetPrice available:
+  oneYear   = analystTargetPrice
+  sixMonths = currentPrice + (analystTargetPrice - currentPrice) × 0.65
+  oneMonth  = currentPrice + (analystTargetPrice - currentPrice) × 0.15
+Otherwise: skip and redistribute weight to other three equally.
+```
+
+#### Method 3: Mean Reversion to Historical P/E (weight 25%)
+```
+targetPE = 18   (long-run S&P 500 average — Shiller CAPE long-run mean)
+If peRatio and eps both available:
+  fairValue = eps × targetPE
+  gap = fairValue - currentPrice
+  Ornstein-Uhlenbeck approximation:
+    oneYear   = currentPrice + gap × 0.30   (30% reversion in 1 year)
+    sixMonths = currentPrice + gap × 0.17
+    oneMonth  = currentPrice + gap × 0.03
+Otherwise: skip.
+```
+
+#### Method 4: Jegadeesh-Titman Momentum Extrapolation (weight 20%)
+```
+Momentum persistence finding: 3–12 month momentum predicts next 3–12 months,
+then reverses (Jegadeesh & Titman 1993).
+
+threeMonthReturn = (close[last] - close[last-63])  / close[last-63]
+sixMonthReturn   = (close[last] - close[last-126]) / close[last-126]
+
+Decay factors (momentum decays and reverses after 12 months):
+  oneMonth   = currentPrice × (1 + threeMonthReturn / 3)
+  sixMonths  = currentPrice × (1 + sixMonthReturn × 0.70)
+  oneYear    = currentPrice × (1 + sixMonthReturn × 0.35)
+
+Need at least 126 data points for 6m return; fall back to 3m only if fewer.
+```
+
+#### Combine methods
+```
+For each horizon, take weighted average of available methods.
+If a method is unavailable, redistribute its weight proportionally to the others.
+Round all targets to 2 decimal places.
+Return null for a horizon only if NO methods could produce a value.
+
+Also return methodsUsed: string[] listing which methods contributed.
+```
+
+---
+
+### SCORING SYSTEM
+
+#### Momentum Score (0–100)
+```
+Components:
+  rsiScore:        clamp(100 - abs(rsi - 55) × 2.2, 0, 100)
+                   — peaks at RSI 55 (mild uptrend), penalises oversold AND overbought
+  stochScore:      %K  (already 0–100; cap benefit above 80, penalise above 85)
+  macdScore:       bullish = 80, neutral = 50, bearish = 20
+  bollingerScore:  clamp(bollingerPosition, 0, 75)
+                   — cap at 75 (>75 = overbought, not a positive)
+  vsMA50Score:     clamp(50 + vsMA50 × 2, 0, 100)
+  vsMA200Score:    clamp(50 + vsMA200 × 1.5, 0, 100)
+  roc20Score:      clamp(50 + roc20 × 2, 0, 100)
+  ichimokuScore:   above_cloud = 80, in_cloud = 50, below_cloud = 20, null = 50
+  goldenCrossBonus: +5 if golden cross, -5 if death cross
+
+Weights:
+  RSI 20%, Stochastic 10%, MACD 15%, Bollinger 8%,
+  vsMA50 15%, vsMA200 12%, ROC20 10%, Ichimoku 10%
+Add goldenCross bonus after weighting. Clamp 0–100.
+```
+
+#### Valuation Score (0–100)
+```
+peScore:
+  PE < 10: 100
+  PE 10–15: linear 100→80
+  PE 15–20: linear 80→60
+  PE 20–30: linear 60→40
+  PE 30–50: linear 40→10
+  PE > 50:  0
+  null:     50
+
+forwardPEBonus: +8 if forwardPE < peRatio (earnings growing), else 0
+
+pegScore:
+  PEG < 0.5: 100
+  PEG 0.5–1: linear 100→80
+  PEG 1–1.5: linear 80→55
+  PEG 1.5–2: linear 55→30
+  PEG > 2:   0
+  null:       50
+
+pbScore:
+  PB < 1: 100; 1–2: 80; 2–3: 60; 3–5: 35; > 5: 10; null: 50
+
+evEbitdaScore:
+  < 6: 100; 6–10: 85; 10–15: 65; 15–20: 45; 20–30: 25; > 30: 5; null: 50
+
+grahamScore:
+  price < grahamNumber:       85
+  price within 10% above:     65
+  price within 20% above:     45
+  price > 20% above:          20
+  null:                       50
+
+earningsYieldScore:
+  yield > 8%:    100
+  yield 6–8%:    80
+  yield 4.5–6%:  60    (at parity with risk-free rate)
+  yield 3–4.5%:  35
+  yield < 3%:    15
+  null:          50
+
+fiftyTwoWeekScore: 100 - fiftyTwoWeekPosition
+  (cheaper relative to range = better value)
+
+Weights: PE 25%, PEG 15%, PB 10%, EV/EBITDA 15%, Graham 15%, EarningsYield 10%, 52wk 10%
+Add forwardPEBonus after weighting. Clamp 0–100.
+```
+
+#### Risk Score (0–100, higher = safer)
+```
+volScore:
+  annVol < 12%:  100
+  12–20%:        linear 100→80
+  20–35%:        linear 80→55
+  35–50%:        linear 55→30
+  50–80%:        linear 30→10
+  > 80%:         0
+  null:          50
+
+betaScore:
+  beta < 0.3:  100
+  0.3–0.7:     linear 100→85
+  0.7–1.0:     linear 85→70
+  1.0–1.5:     linear 70→50
+  1.5–2.0:     linear 50→25
+  2.0–2.5:     linear 25→5
+  > 2.5:       0
+  null:        50
+
+maxDDScore:
+  < 5%:   100
+  5–15%:  linear 100→75
+  15–25%: linear 75→50
+  25–40%: linear 50→25
+  40–60%: linear 25→5
+  > 60%:  0
+
+varScore:
+  VaR < 1%:  100
+  1–2%:      linear 100→70
+  2–3%:      linear 70→45
+  3–5%:      linear 45→15
+  > 5%:      0
+  null:      50
+
+sharpeScore:
+  > 2:    100
+  1–2:    linear 100→75
+  0.5–1:  linear 75→50
+  0–0.5:  linear 50→30
+  < 0:    10
+  null:   50
+
+sortinoScore:
+  > 2.5:    100
+  1.5–2.5:  80
+  0.5–1.5:  55
+  0–0.5:    30
+  < 0:      10
+  null:     50
+
+skewnessAdjustment:
+  skewness > 0.5:  +5   (positive skew = more upside surprises)
+  skewness < -1:   -8   (negative skew = crash risk)
+  skewness < -2:   -15
+
+kurtosisAdjustment:
+  kurtosis > 5:    -8   (fat tails = extreme move risk)
+  kurtosis > 3:    -4
+  kurtosis < 0:    +3   (thin tails = more predictable)
+
+Weights: Vol 22%, Beta 18%, MaxDD 20%, VaR 18%, Sharpe 12%, Sortino 10%
+Apply skewness and kurtosis adjustments after weighting. Clamp 0–100.
+```
+
+#### Quality Score (0–100)
+```
+revenueGrowthScore:
+  > 30%:   100
+  15–30%:  80
+  5–15%:   60
+  0–5%:    40
+  negative: 15
+  null:    50
+
+profitMarginScore:
+  > 25%:   100
+  15–25%:  80
+  8–15%:   60
+  2–8%:    40
+  < 2%:    15
+  negative: 0
+  null:    50
+
+roeScore:
+  > 25%:   100
+  15–25%:  80
+  8–15%:   60
+  2–8%:    40
+  < 2%:    20
+  negative: 5
+  null:    50
+
+debtToEquityScore:
+  < 0.2:   100
+  0.2–0.5: 85
+  0.5–1.0: 65
+  1.0–2.0: 40
+  > 2.0:   10
+  null:    50
+
+currentRatioScore:
+  > 2.5:   100
+  2–2.5:   85
+  1.5–2:   70
+  1–1.5:   50
+  0.5–1:   25
+  < 0.5:   5
+  null:    50
+
+Weights: RevenueGrowth 30%, ProfitMargin 25%, ROE 20%, D/E 15%, CurrentRatio 10%
+```
+
+#### Composite Score
+```
+composite = momentum × 0.28 + valuation × 0.28 + risk × 0.22 + quality × 0.22
+```
+
+#### Verdict thresholds
+```
+72–100: "Strong Buy",  verdictColour: "green"
+58–71:  "Buy",         verdictColour: "green"
+43–57:  "Hold",        verdictColour: "amber"
+29–42:  "Sell",        verdictColour: "red"
+0–28:   "Strong Sell", verdictColour: "red"
+```
+
+#### Health Status
+```
+composite >= 70: "Great"
+composite >= 55: "Good"
+composite >= 42: "Okay"
+composite >= 28: "Weak"
+else:            "Poor"
+```
+
+---
+
+### One-Liner and Target Rationale — generated from computed values (not AI)
+
+```typescript
+function buildOneLiner(r: BottomLineResult): string {
+  const m = r.scores.momentum, v = r.scores.valuation,
+        ri = r.scores.risk,    q = r.scores.quality;
+
+  const mStr  = m  > 65 ? "strong momentum"       : m  < 40 ? "weak momentum"    : "neutral momentum";
+  const vStr  = v  > 65 ? "attractive valuation"  : v  < 40 ? "stretched valuation" : "fair valuation";
+  const rStr  = ri > 65 ? "low risk profile"      : ri < 40 ? "elevated risk"    : "moderate risk";
+  const qStr  = q  > 65 ? "solid fundamentals"    : q  < 40 ? "weak fundamentals": "average fundamentals";
+
+  const rsiNote = r.signals.rsi14 != null
+    ? r.signals.rsi14 > 70 ? " RSI is overbought."
+    : r.signals.rsi14 < 30 ? " RSI is oversold — could be a buying opportunity."
+    : "" : "";
+
+  const volNote = r.signals.historicalVolatility30d != null && r.signals.historicalVolatility30d > 50
+    ? " High volatility means large price swings are likely." : "";
+
+  return `This stock shows ${mStr}, ${vStr}, ${rStr}, and ${qStr}.${rsiNote}${volNote}`;
+}
+
+function buildTargetRationale(r: BottomLineResult, currentPrice: number): string {
+  const used = r.methodsUsed.join(", ");
+  const oneY = r.priceTargets.oneYear;
+  if (!oneY) return "Insufficient data to generate reliable price targets.";
+  const pct = ((oneY - currentPrice) / currentPrice * 100).toFixed(1);
+  const dir = oneY > currentPrice ? "upside" : "downside";
+  return `The 1-year target of $${oneY.toFixed(2)} implies ${Math.abs(Number(pct))}% ${dir} from the current price, derived from ${used}.`;
+}
+```
+
+---
+
+### Error safety
+- Wrap the entire `computeBottomLine` in try/catch
+- Each indicator computed in its own try/catch — a failure in one must not affect others
+- Guard every division against divide-by-zero
+- Return null for any indicator needing more data than is available
+- Minimum data requirements: RSI needs 15pts, MACD needs 35pts, Ichimoku needs 52pts, Volatility needs 31pts, Sharpe/Sortino need 252pts — enforce these strictly
+
+---
+
+## PART 2 — BACKEND ROUTE: update `routes/stocks.ts`
+
+- Add `fetchStockHistory(ticker, "1mo")` to the existing `Promise.all`
+- After building the existing analysis, call `computeBottomLine(quote, history1y, history1m)`
+- Add `bottomLine: BottomLineResult` to the response object
+- Include it in the 15-minute cache as before
+
+---
+
+## PART 3 — FRONTEND
+
+### New file: `src/components/analysis/BottomLine.tsx`
+
+The component receives `data: BottomLineResult` and `currentPrice: number`.
+
+#### LAYMAN CARD (always visible)
+
+Render a prominent card at the top with these elements, in order:
+
+**Row 1 — Verdict + Health**
+- Large coloured verdict badge: green background for Buy/Strong Buy, amber for Hold, red for Sell/Strong Sell
+- Verdict text: "STRONG BUY" etc. in bold large font
+- Health pill next to it: "Health: Great / Good / Okay / Weak / Poor"
+- Composite score on the right: large number e.g. "74 / 100"
+
+**Row 2 — One-liner**
+- The `oneLiner` string in a slightly larger, readable font — this is the plain-English summary
+
+**Row 3 — Price Targets**
+Three cards side by side: "1 Month", "6 Months", "1 Year"
+Each card shows:
+- Target price in large bold text
+- % change from current (green if positive, red if negative)
+- Small range below: "Bear $X · Bull $Y" for 1M and 1Y
+- If null: show "Insufficient data"
+
+**Row 4 — Target Rationale**
+- The `targetRationale` string in small muted text with an info icon
+
+**Row 5 — Four Score Bars**
+Label | filled bar | score number — for Momentum, Valuation, Risk, Quality
+Green if score > 65, amber if 40–65, red if < 40
+
+**"Show Full Analysis ▾" toggle button**
+Clicking expands the Quant Detail Panel below.
+
+---
+
+#### QUANT DETAIL PANEL (collapsed by default, toggleable)
+
+Organised into four sections with sub-headers:
+
+**Momentum & Technical**
+Display as a grid of signal pills (3 columns):
+- RSI 14: value, colour-coded (red >70, green <30, neutral otherwise)
+- Stochastic %K / %D
+- Williams %R
+- MACD: ↑ Bullish / → Neutral / ↓ Bearish + histogram value
+- Bollinger Position %
+- ATR 14
+- OBV Trend: Rising / Falling / Flat
+- ROC 20d %
+- vs MA20 / MA50 / MA200 %
+- Golden Cross: ✓ Yes / ✗ No
+- Ichimoku: Above / In / Below Cloud
+- Fibonacci Level
+
+**Valuation**
+Grid of pills:
+- P/E, Forward P/E, PEG, P/B, P/S, EV/EBITDA
+- Earnings Yield %
+- Dividend Yield %
+- Graham Number + % vs current price
+- 52-Week Position %
+
+**Risk & Statistics**
+Grid of pills:
+- Beta
+- 30d Historical Volatility %
+- Sharpe Ratio
+- Sortino Ratio
+- Max Drawdown %
+- VaR 95% (daily)
+- Calmar Ratio
+- Skewness (negative = flag in red)
+- Excess Kurtosis (>3 = flag in amber)
+
+**Quality / Fundamentals**
+Grid of pills:
+- Revenue Growth %
+- Profit Margin %
+- Return on Equity %
+- Debt / Equity
+- Current Ratio
+
+At the bottom of the panel, show:
+**Methods used for price targets:** list the `methodsUsed` array
+**Disclaimer:** "Price targets combine Monte Carlo simulation, analyst consensus, mean-reversion, and momentum extrapolation. All signals are calculated from historical price and fundamental data. This is not financial advice."
+
+---
+
+### Update `src/pages/analysis.tsx`
+
+Render `<BottomLine data={analysis.bottomLine} currentPrice={analysis.performance.currentPrice} />` directly below EarningsBanner and above Overview. Keep all existing components exactly as they are.
+
+---
+
+## Final notes
+
+- No new npm dependencies — all formulas pure TypeScript
+- Never produce garbage output: null is always better than a wrong number
+- Test with at least AAPL, TSLA, and T (AT&T — defensive, dividend) to sense-check scores
+- Keep all existing features working
+- Follow existing TypeScript strict mode, Tailwind dark theme, and logger patterns throughout

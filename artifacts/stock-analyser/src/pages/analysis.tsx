@@ -22,6 +22,7 @@ import Suggestion from "@/components/analysis/Suggestion";
 import LiveNews from "@/components/analysis/LiveNews";
 import SimpleExplanation from "@/components/analysis/SimpleExplanation";
 import EarningsBanner from "@/components/analysis/EarningsBanner";
+import BottomLine from "@/components/analysis/BottomLine";
 import ComparisonView from "@/components/analysis/ComparisonView";
 import ChatPanel from "@/components/analysis/ChatPanel";
 import { useWatchlist } from "@/hooks/use-watchlist";

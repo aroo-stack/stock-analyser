@@ -11,6 +11,7 @@ import {
 } from "../lib/stockData";
 import { generateStockAIAnalysis } from "../lib/stockAI";
 import { getAIStockPicks } from "../lib/stockPicks";
+import { computeBottomLine } from "../lib/bottomLine";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -109,6 +110,9 @@ router.get("/stocks/:ticker/analysis", async (req, res): Promise<void> => {
       fetchStockHistory(ticker, "5y").catch(() => ({ ticker, prices: [], ma50: [], ma200: [] })),
       fetchStockNews(ticker),
     ]);
+
+    // Compute bottom line (quant signals + Monte Carlo) — no await needed, pure CPU
+    const bottomLine = computeBottomLine(quote, history1y);
     req.log.info({ ticker, newsCount: rawNews.length }, "Fetched live news");
 
     // Price performance
@@ -257,6 +261,7 @@ router.get("/stocks/:ticker/analysis", async (req, res): Promise<void> => {
         ...aiAnalysis.suggestion,
         disclaimer: aiAnalysis.suggestion.disclaimer,
       },
+      bottomLine,
       generatedAt: new Date().toISOString(),
     };
 
