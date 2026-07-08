@@ -60,9 +60,9 @@ export interface StockQuoteData {
   evToEbitda: number | null;
 }
 
-export type Period = "1mo" | "3mo" | "6mo" | "1y" | "3y" | "5y";
+export type Period = "1d" | "1mo" | "3mo" | "6mo" | "1y" | "3y" | "5y";
 
-function periodToDates(period: Period): { from: Date; to: Date } {
+function periodToDates(period: Exclude<Period, "1d">): { from: Date; to: Date } {
   const to = new Date();
   const from = new Date();
   switch (period) {
@@ -92,6 +92,11 @@ export async function fetchStockHistory(
   ticker: string,
   period: Period = "1y"
 ): Promise<StockHistoryResult> {
+  // 1-day uses intraday chart data (5-minute candles)
+  if (period === "1d") {
+    return fetchIntradayHistory(ticker);
+  }
+
   const { from, to } = periodToDates(period);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -120,6 +125,49 @@ export async function fetchStockHistory(
   const ma200 = calcMA(prices, 200);
 
   return { ticker: ticker.toUpperCase(), prices, ma50, ma200 };
+}
+
+async function fetchIntradayHistory(ticker: string): Promise<StockHistoryResult> {
+  const to = new Date();
+  const from = new Date();
+  // Go back 2 days to ensure we capture the latest trading session
+  from.setDate(from.getDate() - 2);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result: any = await yf.chart(ticker, {
+    period1: from,
+    period2: to,
+    interval: "5m",
+  }, { validateResult: false });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const quotes: any[] = result?.quotes ?? [];
+
+  if (!quotes || quotes.length === 0) {
+    throw new Error(`No intraday data for ${ticker}`);
+  }
+
+  // Keep only today's session (latest trading day)
+  const latestDate = (quotes[quotes.length - 1]?.date instanceof Date
+    ? quotes[quotes.length - 1].date
+    : new Date(quotes[quotes.length - 1]?.date)
+  ).toDateString();
+
+  const todayQuotes = quotes.filter((q) => {
+    const d = q.date instanceof Date ? q.date : new Date(q.date);
+    return d.toDateString() === latestDate && q.close != null;
+  });
+
+  const prices: PricePoint[] = todayQuotes.map((q) => ({
+    date: (q.date instanceof Date ? q.date : new Date(q.date)).toISOString(),
+    open:   q.open   ?? q.close ?? 0,
+    high:   q.high   ?? q.close ?? 0,
+    low:    q.low    ?? q.close ?? 0,
+    close:  q.close  ?? 0,
+    volume: q.volume ?? 0,
+  }));
+
+  return { ticker: ticker.toUpperCase(), prices, ma50: [], ma200: [] };
 }
 
 export async function fetchQuote(ticker: string): Promise<StockQuoteData> {

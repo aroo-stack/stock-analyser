@@ -60,11 +60,11 @@ router.get("/stocks/:ticker/history", async (req, res): Promise<void> => {
   }
 
   const period = (req.query["period"] as string) || "1y";
-  const validPeriods = ["1mo", "3mo", "6mo", "1y", "3y", "5y"] as const;
+  const validPeriods = ["1d", "1mo", "3mo", "6mo", "1y", "3y", "5y"] as const;
   type ValidPeriod = typeof validPeriods[number];
 
   if (!validPeriods.includes(period as ValidPeriod)) {
-    res.status(400).json({ error: "Invalid period. Use: 1mo, 3mo, 6mo, 1y, 3y, 5y" });
+    res.status(400).json({ error: "Invalid period. Use: 1d, 1mo, 3mo, 6mo, 1y, 3y, 5y" });
     return;
   }
 

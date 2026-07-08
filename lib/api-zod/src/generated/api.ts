@@ -27,7 +27,7 @@ export const FetchPriceHistoryParams = zod.object({
 export const fetchPriceHistoryQueryPeriodDefault = `1y`;
 
 export const FetchPriceHistoryQueryParams = zod.object({
-  "period": zod.enum(['1mo', '3mo', '6mo', '1y', '3y', '5y']).default(fetchPriceHistoryQueryPeriodDefault)
+  "period": zod.enum(['1d', '1mo', '3mo', '6mo', '1y', '3y', '5y']).default(fetchPriceHistoryQueryPeriodDefault)
 })
 
 export const FetchPriceHistoryResponse = zod.object({

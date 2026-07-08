@@ -670,6 +670,7 @@ export type FetchPriceHistoryPeriod = typeof FetchPriceHistoryPeriod[keyof typeo
 
 
 export const FetchPriceHistoryPeriod = {
+  '1d': '1d',
   '1mo': '1mo',
   '3mo': '3mo',
   '6mo': '6mo',
