@@ -101,13 +101,16 @@ function TargetBar({ low, mean, high, current, currency }: {
 
 // ─── P/E Scenario Slider ─────────────────────────────────────────────────────
 
-function PESlider({ forwardEps, forwardEps2y, forwardPE, currentPrice, currency }: {
-  forwardEps: number; forwardEps2y: number | null; forwardPE: number | null; currentPrice: number; currency?: string;
+function PESlider({ forwardEps, forwardEps2y, forwardPE, trailingEps, currentPrice, currency }: {
+  forwardEps: number; forwardEps2y: number | null; forwardPE: number | null; trailingEps: number | null; currentPrice: number; currency?: string;
 }) {
   const sym = currency ?? "$";
-  const defaultPE = forwardPE ?? Math.round(currentPrice / forwardEps);
-  const minPE = Math.max(5, Math.floor(defaultPE * 0.3));
-  const maxPE = Math.ceil(defaultPE * 3.5);
+  const forwardPECalc = forwardPE ?? (currentPrice / forwardEps);
+  const trailingPECalc = trailingEps != null && trailingEps > 0 ? currentPrice / trailingEps : null;
+
+  const defaultPE = Math.round(forwardPECalc * 2) / 2;
+  const minPE = Math.max(5, Math.floor(Math.min(forwardPECalc, trailingPECalc ?? forwardPECalc) * 0.5));
+  const maxPE = Math.ceil(Math.max(forwardPECalc, trailingPECalc ?? forwardPECalc) * 2.5);
 
   const [selectedPE, setSelectedPE] = useState(defaultPE);
 
@@ -126,20 +129,44 @@ function PESlider({ forwardEps, forwardEps2y, forwardPE, currentPrice, currency 
         <div className="text-lg font-mono font-bold text-primary">{selectedPE.toFixed(1)}×</div>
       </div>
 
-      <input
-        type="range"
-        min={minPE}
-        max={maxPE}
-        step={0.5}
-        value={selectedPE}
-        onChange={(e) => setSelectedPE(parseFloat(e.target.value))}
-        className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
-        style={{
-          background: `linear-gradient(90deg, ${thumbColor} 0%, ${thumbColor} ${((selectedPE - minPE) / (maxPE - minPE)) * 100}%, hsl(var(--muted)) ${((selectedPE - minPE) / (maxPE - minPE)) * 100}%, hsl(var(--muted)) 100%)`,
-        }}
-      />
-      <div className="flex justify-between text-[10px] font-mono text-muted-foreground">
+      <div className="relative">
+        <input
+          type="range"
+          min={minPE}
+          max={maxPE}
+          step={0.5}
+          value={selectedPE}
+          onChange={(e) => setSelectedPE(parseFloat(e.target.value))}
+          className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
+          style={{
+            background: `linear-gradient(90deg, ${thumbColor} 0%, ${thumbColor} ${((selectedPE - minPE) / (maxPE - minPE)) * 100}%, hsl(var(--muted)) ${((selectedPE - minPE) / (maxPE - minPE)) * 100}%, hsl(var(--muted)) 100%)`,
+          }}
+        />
+        {/* Forward P/E marker */}
+        <div
+          className="absolute -top-5 text-[9px] font-mono text-sky-400 whitespace-nowrap"
+          style={{ left: `${Math.max(0, Math.min(95, ((forwardPECalc - minPE) / (maxPE - minPE)) * 100))}%`, transform: "translateX(-50%)" }}
+        >
+          Fwd {forwardPECalc.toFixed(1)}×
+        </div>
+        {/* Trailing P/E marker */}
+        {trailingPECalc != null && Math.abs(trailingPECalc - forwardPECalc) > 1 && (
+          <div
+            className="absolute -top-5 text-[9px] font-mono text-amber-400 whitespace-nowrap"
+            style={{ left: `${Math.max(0, Math.min(95, ((trailingPECalc - minPE) / (maxPE - minPE)) * 100))}%`, transform: "translateX(-50%)" }}
+          >
+            Trail {trailingPECalc.toFixed(1)}×
+          </div>
+        )}
+      </div>
+      <div className="flex justify-between text-[10px] font-mono text-muted-foreground mt-1">
         <span>{minPE}×</span>
+        <div className="flex gap-3 text-[9px]">
+          <span className="text-sky-400">▲ Fwd P/E (next-12m earnings)</span>
+          {trailingPECalc != null && Math.abs(trailingPECalc - forwardPECalc) > 1 && (
+            <span className="text-amber-400">▲ Trailing P/E (last 12m)</span>
+          )}
+        </div>
         <span>{maxPE}×</span>
       </div>
 
@@ -359,6 +386,7 @@ export default function ScenarioEngine({ quant, currentPrice }: Props) {
           forwardEps={forwardEps}
           forwardEps2y={forwardEps2y ?? null}
           forwardPE={forwardPE ?? null}
+          trailingEps={quant.eps ?? null}
           currentPrice={currentPrice}
         />
       )}
