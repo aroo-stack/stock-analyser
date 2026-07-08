@@ -205,17 +205,12 @@ export default function Analysis() {
                 <PriceChart ticker={ticker} />
                 <PricePerformance performance={analysis.performance} />
                 {analysis.liveNews && <LiveNews liveNews={analysis.liveNews} />}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <GrowthAnalysis growth={analysis.growth} />
-                  <Suggestion suggestion={analysis.suggestion} />
-                </div>
+                <Suggestion suggestion={analysis.suggestion} />
               </div>
 
               {/* Right Column - 4/12 */}
               <div className="xl:col-span-4 space-y-6">
                 <Overview overview={analysis.overview} />
-                <QuantMetrics metrics={analysis.quant} />
-
                 {analysis.qualitativeNotes && (
                   <Card className="p-5 border-border bg-card">
                     <h3 className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-4">
@@ -229,14 +224,22 @@ export default function Analysis() {
               </div>
             </div>
 
-            {/* Scenario Engine + Catalyst Analysis */}
-            <div className="border-t border-border pt-8 space-y-6">
-              <ScenarioEngine
-                quant={analysis.quant as any}
-                currentPrice={analysis.performance.currentPrice}
-              />
-              <CatalystAnalysis ticker={ticker} />
+            {/* Growth Projections + Scenario Engine — side by side */}
+            <div className="border-t border-border pt-8">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <GrowthAnalysis growth={analysis.growth} />
+                <ScenarioEngine
+                  quant={analysis.quant as any}
+                  currentPrice={analysis.performance.currentPrice}
+                />
+              </div>
             </div>
+
+            {/* Quant Metrics — below Scenario Engine */}
+            <QuantMetrics metrics={analysis.quant} />
+
+            {/* Catalyst Analysis */}
+            <CatalystAnalysis ticker={ticker} />
 
             {/* Bottom Line */}
             {(analysis as any).bottomLine && (
