@@ -1,6 +1,8 @@
-import { openai } from "@workspace/integrations-openai-ai-server";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { fetchQuote } from "./stockData";
 import { logger } from "./logger";
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 export interface StockPick {
   ticker: string;
@@ -20,19 +22,40 @@ export interface StockPick {
   category: "Growth" | "Value" | "Dividend" | "Momentum";
 }
 
-// Server-side cache — 20 minute TTL
 let picksCache: { picks: StockPick[]; expiresAt: number } | null = null;
 
-// Broad candidate universe across sectors
 const CANDIDATES = [
-  "NVDA", "MSFT", "AAPL", "GOOGL", "META", "AMZN", "AMD", "AVGO", "CRM", "ASML",
-  "V", "MA", "JPM", "GS", "BLK",
-  "LLY", "UNH", "ABBV",
-  "COST", "HD", "WMT",
-  "NEE", "XOM", "CVX",
+  "NVDA",
+  "MSFT",
+  "AAPL",
+  "GOOGL",
+  "META",
+  "AMZN",
+  "AMD",
+  "AVGO",
+  "CRM",
+  "ASML",
+  "V",
+  "MA",
+  "JPM",
+  "GS",
+  "BLK",
+  "LLY",
+  "UNH",
+  "ABBV",
+  "COST",
+  "HD",
+  "WMT",
+  "NEE",
+  "XOM",
+  "CVX",
 ];
 
-function calcTrend(price: number, ma50: number | null, ma200: number | null): string {
+function calcTrend(
+  price: number,
+  ma50: number | null,
+  ma200: number | null,
+): string {
   if (!ma50 || !ma200) return "unknown";
   if (price > ma50 && ma50 > ma200) return "uptrend";
   if (price < ma50 && ma50 < ma200) return "downtrend";
@@ -63,15 +86,13 @@ interface CandidateData {
 }
 
 export async function getAIStockPicks(): Promise<StockPick[]> {
-  // Return cached picks if still valid
   if (picksCache && picksCache.expiresAt > Date.now()) {
     logger.info("Returning cached stock picks");
     return picksCache.picks;
   }
 
-  // Fetch all candidates in parallel, silently drop failures
   const settled = await Promise.allSettled(
-    CANDIDATES.map((ticker) => fetchQuote(ticker))
+    CANDIDATES.map((ticker) => fetchQuote(ticker)),
   );
 
   const candidates: CandidateData[] = settled
@@ -79,7 +100,9 @@ export async function getAIStockPicks(): Promise<StockPick[]> {
       if (r.status === "rejected") return null;
       const q = r.value;
       const change1dPct = q.previousClose
-        ? Math.round(((q.currentPrice - q.previousClose) / q.previousClose) * 10000) / 100
+        ? Math.round(
+            ((q.currentPrice - q.previousClose) / q.previousClose) * 10000,
+          ) / 100
         : null;
       return {
         ticker: CANDIDATES[i],
@@ -106,52 +129,37 @@ export async function getAIStockPicks(): Promise<StockPick[]> {
     })
     .filter((c): c is CandidateData => c !== null);
 
-  logger.info({ count: candidates.length }, "Fetched stock pick candidates");
-
   const summary = candidates
     .map(
       (c) =>
         `${c.ticker} (${c.name}, ${c.sector ?? "N/A"}): price=${c.currentPrice} ${c.currency}` +
-        `, PE=${c.pe ?? "N/A"}, fwdPE=${c.forwardPE ?? "N/A"}, PB=${c.pb ?? "N/A"}` +
+        `, PE=${c.pe ?? "N/A"}, fwdPE=${c.forwardPE ?? "N/A"}` +
         `, revGrowth=${c.revenueGrowth != null ? (c.revenueGrowth * 100).toFixed(1) + "%" : "N/A"}` +
-        `, epsGrowth=${c.earningsGrowth != null ? (c.earningsGrowth * 100).toFixed(1) + "%" : "N/A"}` +
-        `, ROE=${c.returnOnEquity != null ? (c.returnOnEquity * 100).toFixed(1) + "%" : "N/A"}` +
-        `, margin=${c.profitMargin != null ? (c.profitMargin * 100).toFixed(1) + "%" : "N/A"}` +
         `, beta=${c.beta ?? "N/A"}, trend=${c.trendDirection}` +
-        `, analyst=${c.analystRating ?? "N/A"}, target=${c.targetPrice ?? "N/A"}` +
-        `, D/E=${c.debtToEquity ?? "N/A"}`
+        `, analyst=${c.analystRating ?? "N/A"}, target=${c.targetPrice ?? "N/A"}`,
     )
     .join("\n");
 
-  const prompt = `You are a quantitative stock analyst. Based on the following live market data, select exactly 6 stocks that look most compelling to buy RIGHT NOW. Prioritise stocks with strong fundamentals, positive momentum, reasonable valuation relative to growth, and analyst support. Diversify across categories (Growth, Value, Dividend, Momentum).
+  const prompt = `You are a quantitative stock analyst. Based on the following live market data, select exactly 6 stocks that look most compelling to buy RIGHT NOW.
 
 Candidate universe:
 ${summary}
 
-Return ONLY valid JSON — an array of exactly 6 objects:
+Return ONLY valid JSON — an array of exactly 6 objects (no markdown, no backticks):
 [
   {
     "ticker": "...",
-    "rationale": "2-3 sentences: specific data-grounded reason why this stock stands out now.",
+    "rationale": "2-3 sentences with specific data-grounded reason.",
     "conviction": "High|Medium",
     "category": "Growth|Value|Dividend|Momentum"
   }
-]
-
-Rules:
-- Be specific and data-grounded. Quote actual numbers (PE, growth, price vs target etc).
-- No generic statements. Each rationale must reference at least 2 specific metrics.
-- Vary sectors/categories — no more than 2 from the same sector.
-- conviction=High only if multiple strong signals align.`;
+]`;
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-5.1",
-      max_completion_tokens: 1024,
-      messages: [{ role: "user", content: prompt }],
-    });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const result = await model.generateContent(prompt);
+    const content = result.response.text();
 
-    const content = response.choices[0]?.message?.content ?? "";
     const jsonMatch = content.match(/\[[\s\S]*\]/);
     if (!jsonMatch) throw new Error("No JSON array in response");
 
@@ -173,7 +181,7 @@ Rules:
           currency: c.currency,
           currentPrice: c.currentPrice,
           change1dPct: c.change1dPct,
-          change1yPct: null as number | null,
+          change1yPct: null,
           trendDirection: c.trendDirection,
           analystRating: c.analystRating,
           targetPrice: c.targetPrice,
@@ -186,7 +194,10 @@ Rules:
       })
       .filter((p): p is StockPick => p !== null);
 
-    logger.info({ picks: picks.map((p) => p.ticker) }, "AI stock picks generated");
+    logger.info(
+      { picks: picks.map((p) => p.ticker) },
+      "AI stock picks generated",
+    );
     picksCache = { picks, expiresAt: Date.now() + 20 * 60 * 1000 };
     return picks;
   } catch (err) {
@@ -198,14 +209,13 @@ Rules:
 }
 
 function generateFallbackPicks(candidates: CandidateData[]): StockPick[] {
-  // Score each candidate on a simple multi-factor ranking
   const scored = candidates
     .map((c) => {
       let score = 0;
       if (c.trendDirection === "uptrend") score += 2;
-      if (c.analystRating === "buy" || c.analystRating === "strongBuy") score += 2;
+      if (c.analystRating === "buy" || c.analystRating === "strongBuy")
+        score += 2;
       if (c.revenueGrowth != null && c.revenueGrowth > 0.1) score += 1;
-      if (c.earningsGrowth != null && c.earningsGrowth > 0.1) score += 1;
       if (c.profitMargin != null && c.profitMargin > 0.15) score += 1;
       if (c.targetPrice != null && c.currentPrice < c.targetPrice) score += 1;
       if (c.pe != null && c.pe < 30) score += 1;
@@ -227,8 +237,12 @@ function generateFallbackPicks(candidates: CandidateData[]): StockPick[] {
     targetPrice: c.targetPrice,
     pe: c.pe,
     beta: c.beta,
-    rationale: `${c.name} scores well on fundamentals${c.trendDirection === "uptrend" ? " with a confirmed uptrend" : ""}${c.analystRating ? ` and a consensus analyst rating of ${c.analystRating}` : ""}${c.targetPrice && c.targetPrice > c.currentPrice ? `. Analyst target of ${c.targetPrice.toFixed(2)} implies potential upside from current price` : ""}.`,
-    conviction: c.score >= 5 ? "High" : "Medium" as "High" | "Medium",
-    category: (c.revenueGrowth != null && c.revenueGrowth > 0.15 ? "Growth" : c.dividendYield != null && c.dividendYield > 0.02 ? "Dividend" : "Momentum") as "Growth" | "Value" | "Dividend" | "Momentum",
+    rationale: `${c.name} scores well on fundamentals${c.trendDirection === "uptrend" ? " with a confirmed uptrend" : ""}.`,
+    conviction: (c.score >= 5 ? "High" : "Medium") as "High" | "Medium",
+    category: (c.revenueGrowth != null && c.revenueGrowth > 0.15
+      ? "Growth"
+      : c.dividendYield != null && c.dividendYield > 0.02
+        ? "Dividend"
+        : "Momentum") as "Growth" | "Value" | "Dividend" | "Momentum",
   }));
 }
