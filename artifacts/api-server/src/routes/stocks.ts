@@ -12,6 +12,7 @@ import {
 import { generateStockAIAnalysis } from "../lib/stockAI";
 import { getAIStockPicks } from "../lib/stockPicks";
 import { computeBottomLine } from "../lib/bottomLine";
+import { generateCatalysts } from "../lib/stockCatalysts";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -19,6 +20,10 @@ const router: IRouter = Router();
 // 15-minute in-memory analysis cache
 const analysisCache = new Map<string, { data: Record<string, unknown>; timestamp: number }>();
 const CACHE_TTL = 15 * 60 * 1000;
+
+// 6-hour catalyst cache
+const catalystCache = new Map<string, { data: Record<string, unknown>; timestamp: number }>();
+const CATALYST_TTL = 6 * 60 * 60 * 1000;
 
 // GET /stocks/picks
 router.get("/stocks/picks", async (req, res): Promise<void> => {
@@ -239,6 +244,12 @@ router.get("/stocks/:ticker/analysis", async (req, res): Promise<void> => {
         trendDirection,
         analystRating: quote.analystRating,
         targetPrice: quote.targetPrice,
+        targetLowPrice: quote.targetLowPrice,
+        targetHighPrice: quote.targetHighPrice,
+        targetMedianPrice: quote.targetMedianPrice,
+        numberOfAnalysts: quote.numberOfAnalysts,
+        forwardEps: quote.forwardEps,
+        forwardEps2y: quote.forwardEps2y,
         supportLevel,
         resistanceLevel,
       },
@@ -276,6 +287,41 @@ router.get("/stocks/:ticker/analysis", async (req, res): Promise<void> => {
     } else {
       res.status(500).json({ error: "Failed to generate analysis" });
     }
+  }
+});
+
+// GET /stocks/:ticker/catalysts
+router.get("/stocks/:ticker/catalysts", async (req, res): Promise<void> => {
+  const rawTicker = Array.isArray(req.params.ticker) ? req.params.ticker[0] : req.params.ticker;
+  const ticker = rawTicker?.toUpperCase();
+  if (!ticker) { res.status(400).json({ error: "Ticker is required" }); return; }
+
+  const now = Date.now();
+  const hit = catalystCache.get(ticker);
+  if (hit && now - hit.timestamp < CATALYST_TTL) {
+    req.log.info({ ticker }, "Serving catalysts from cache");
+    res.json({ ...hit.data, cached: true });
+    return;
+  }
+
+  try {
+    const [quote, news] = await Promise.all([
+      fetchQuote(ticker),
+      fetchStockNews(ticker),
+    ]);
+    const result = await generateCatalysts(
+      ticker,
+      quote.name,
+      quote.currentPrice,
+      quote.targetLowPrice,
+      quote.targetHighPrice,
+      news,
+    );
+    catalystCache.set(ticker, { data: result as unknown as Record<string, unknown>, timestamp: now });
+    res.json({ ...result, cached: false });
+  } catch (err: any) {
+    req.log.error({ ticker, err: err.message }, "Catalyst generation failed");
+    res.status(500).json({ error: "Failed to generate catalyst analysis" });
   }
 });
 

@@ -115,6 +115,12 @@ export const FetchStockAnalysisResponse = zod.object({
   "trendDirection": zod.enum(['uptrend', 'downtrend', 'sideways', 'unknown']),
   "analystRating": zod.string().nullish(),
   "targetPrice": zod.number().nullish(),
+  "targetLowPrice": zod.number().nullish(),
+  "targetHighPrice": zod.number().nullish(),
+  "targetMedianPrice": zod.number().nullish(),
+  "numberOfAnalysts": zod.number().nullish(),
+  "forwardEps": zod.number().nullish(),
+  "forwardEps2y": zod.number().nullish(),
   "supportLevel": zod.number().nullish(),
   "resistanceLevel": zod.number().nullish()
 }),
@@ -283,6 +289,22 @@ export const FindStocksResponseItem = zod.object({
   "type": zod.string().nullish()
 })
 export const FindStocksResponse = zod.array(FindStocksResponseItem)
+
+
+/**
+ * @summary Get AI-generated bull/bear catalysts for a stock
+ */
+export const GetStockCatalystsParams = zod.object({
+  "ticker": zod.coerce.string()
+})
+
+export const GetStockCatalystsResponse = zod.object({
+  "ticker": zod.string(),
+  "bulls": zod.array(zod.string()),
+  "bears": zod.array(zod.string()),
+  "generatedAt": zod.string(),
+  "cached": zod.boolean().optional()
+})
 
 
 /**

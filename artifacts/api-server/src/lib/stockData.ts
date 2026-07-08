@@ -58,6 +58,12 @@ export interface StockQuoteData {
   ma200: number | null;
   bookValuePerShare: number | null;
   evToEbitda: number | null;
+  targetLowPrice: number | null;
+  targetHighPrice: number | null;
+  targetMedianPrice: number | null;
+  numberOfAnalysts: number | null;
+  forwardEps: number | null;
+  forwardEps2y: number | null;
 }
 
 export type Period = "1d" | "1mo" | "3mo" | "6mo" | "1y" | "3y" | "5y";
@@ -180,6 +186,7 @@ export async function fetchQuote(ticker: string): Promise<StockQuoteData> {
         "financialData",
         "defaultKeyStatistics",
         "summaryDetail",
+        "earningsTrend",
       ],
     }, { validateResult: false }),
   ]);
@@ -198,6 +205,16 @@ export async function fetchQuote(ticker: string): Promise<StockQuoteData> {
   const fd = summary?.financialData ?? {};
   const ks = summary?.defaultKeyStatistics ?? {};
   const sd = summary?.summaryDetail ?? {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const eTrends: any[] = summary?.earningsTrend?.trend ?? [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fwd1y = eTrends.find((t: any) => t.period === "+1y");
+  const fwdEps: number | null = fwd1y?.earningsEstimate?.avg ?? null;
+  const earningsGrowthRate: number | null = fd.earningsGrowth ?? null;
+  const fwdEps2y: number | null =
+    fwdEps != null && earningsGrowthRate != null
+      ? Math.round(fwdEps * (1 + earningsGrowthRate) * 100) / 100
+      : null;
 
   if (!q?.regularMarketPrice) {
     throw new Error(`Invalid ticker: ${ticker}`);
@@ -244,6 +261,12 @@ export async function fetchQuote(ticker: string): Promise<StockQuoteData> {
     ma200: q.twoHundredDayAverage ?? null,
     bookValuePerShare: ks.bookValue ?? null,
     evToEbitda: ks.enterpriseToEbitda ?? null,
+    targetLowPrice: fd.targetLowPrice ?? null,
+    targetHighPrice: fd.targetHighPrice ?? null,
+    targetMedianPrice: fd.targetMedianPrice ?? null,
+    numberOfAnalysts: fd.numberOfAnalystOpinions ?? null,
+    forwardEps: fwdEps,
+    forwardEps2y: fwdEps2y,
   };
 }
 

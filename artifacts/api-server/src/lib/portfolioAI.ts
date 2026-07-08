@@ -58,7 +58,7 @@ ${holdingSummaries}
 Respond with ONLY the plain text summary (no JSON, no headers, no bullet points). Write 3-4 paragraphs.`;
 
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
     const result = await model.generateContent(prompt);
     const content = result.response.text().trim();
     if (!content) throw new Error("Empty AI response");

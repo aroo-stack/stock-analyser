@@ -1,0 +1,42 @@
+Create a highly advanced, institutional-grade stock research dashboard application using Python (Flask) for the backend and a modern, responsive single-page web interface styled with Tailwind CSS. The app must deliver highly accurate data and handle dynamic low, base, and high-case projections natively without hardcoding. 
+
+Implement the following five specific modules and structural logic:
+
+1. DYNAMIC SCENARIO ENGINE & INTERACTIVE UI SLIDER
+- Create a global search bar. When a user queries a stock ticker (e.g., MU, NVDA, AAPL), the Flask backend must fetch real-time data using the `yfinance` library or a similar financial API.
+- Extract the following specific variables: current market price, forward 1-year EPS, forward 2-year EPS, `targetLowPrice`, `targetMeanPrice`, and `targetHighPrice`.
+- On the frontend dashboard, display these targets inside a sleek, color-coded visual progress bar component (crimson for low, gray for mean, emerald for high) that shows exactly where the current stock price sits relative to those bounds.
+- Build an interactive "Choose Your Valuation" slider component in Javascript. Moving the slider between the Low, Base, and High targets must dynamically recalculate and display the implied Forward P/E multiple and the required revenue growth rate needed to hit that specific price target based on the current EPS ($Price = Projected\ EPS \times Multiple$).
+
+2. AUTOMATED DATA NORMALISATION AND FILTERING PIPELINE
+- Write a backend Python utility function to sanitize noisy analyst target data. It must evaluate incoming targets and filter out stale values (older than 90 days) or statistical anomalies that deviate massively from the current spot price.
+- Use this template structure for the data cleanup logic:
+  def filter_and_calculate_targets(analyst_data, current_price):
+      valid_targets = [t for t in analyst_data if t.get('age_days', 0) <= 90]
+      if not valid_targets: return {"high": current_price, "low": current_price, "high_return": 0, "low_return": 0}
+      high_case = max([t['target'] for t in valid_targets])
+      low_case = min([t['target'] for t in valid_targets])
+      return {
+          "high": high_case, "low": low_case,
+          "high_return": ((high_case - current_price) / current_price) * 100,
+          "low_return": ((low_case - current_price) / current_price) * 100
+      }
+- Display these calculated "Implied Return %" metrics clearly next to the price targets on the frontend UI.
+
+3. AI-POWERED "CATALYST SCRAPER" MODULE
+- Integrate an LLM API connection (such as OpenAI or Anthropic) in the backend using environment variables for the API keys.
+- When a user searches a ticker, the app must programmatically fetch the top 5 recent financial news headlines or article snippets mentioning 'bull case', 'bear case', or 'outlook' for that specific company.
+- Pass this text to the LLM with a strict prompt parameter: "Analyze these articles and extract exactly 3 short, punchy bullet points summarizing the structural catalysts behind the high target (Bulls) and exactly 3 short bullet points summarizing the structural risks behind the low target (Bears). Avoid generic commentary and focus on specific data points like capacity, margins, or CapEx."
+- Render these outputs cleanly side-by-side in custom Tailwind card elements titled "Why the High Case Happens" and "Why the Low Case Happens".
+
+4. INTERACTIVE FORWARD VALUATION TABLES
+- Create a clean data table component using Tailwind CSS to map out the underlying fundamentals explicitly.
+- The table must pull the consensus 1-year and 2-year forward Earnings Per Share (EPS) estimates.
+- Structure 3 static rows for Low, Base, and High cases. Include interactive input fields within the table cells allowing users to manually adjust the assumed P/E multiples (e.g., 10x, 15x, 25x) to instantly update the implied future stock price directly in the table matrix.
+
+5. SYSTEM ARCHITECTURE & PERFORMANCE OPTIMISATION
+- Set up a robust architectural data pipeline: [User Search Query] -> [Flask Backend Server] -> [Financial API / Scraper] -> [In-Memory Cache (Python Dictionary/Flask-Caching)] -> [Frontend Dashboard UI].
+- Implement a 6-hour local cache for financial data and analyst targets to optimize performance, prevent hitting external API rate limits, and eliminate UI lag during high traffic.
+- Wrap all data-fetching operations in `try-except` blocks. If an invalid ticker is entered or an API failure occurs, gracefully catch the error and display an elegant alert banner on the frontend rather than breaking the application state.
+
+Generate the complete project code, including the backend `main.py` Flask app file, any necessary data-processing helper functions, and a polished, dark-theme-supported HTML template with integrated JavaScript for real-time calculations.

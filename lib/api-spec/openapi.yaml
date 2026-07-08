@@ -130,6 +130,27 @@ paths:
                 items:
                   $ref: "#/components/schemas/StockSearchResult"
 
+  /stocks/{ticker}/catalysts:
+    get:
+      operationId: getStockCatalysts
+      tags: [stocks]
+      summary: Get AI-generated bull/bear catalysts for a stock
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Catalyst analysis result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalystResult"
+        "500":
+          description: Internal server error
+
   /stocks/{ticker}/earnings:
     get:
       operationId: getStockEarnings
@@ -445,6 +466,18 @@ components:
           type: ["string", "null"]
         targetPrice:
           type: ["number", "null"]
+        targetLowPrice:
+          type: ["number", "null"]
+        targetHighPrice:
+          type: ["number", "null"]
+        targetMedianPrice:
+          type: ["number", "null"]
+        numberOfAnalysts:
+          type: ["integer", "null"]
+        forwardEps:
+          type: ["number", "null"]
+        forwardEps2y:
+          type: ["number", "null"]
         supportLevel:
           type: ["number", "null"]
         resistanceLevel:
@@ -606,6 +639,29 @@ components:
           description: "ISO 8601 date string of the next earnings date, or null if unknown"
       required:
         - earningsDate
+
+    CatalystResult:
+      type: object
+      properties:
+        ticker:
+          type: string
+        bulls:
+          type: array
+          items:
+            type: string
+        bears:
+          type: array
+          items:
+            type: string
+        generatedAt:
+          type: string
+        cached:
+          type: boolean
+      required:
+        - ticker
+        - bulls
+        - bears
+        - generatedAt
 
     ChatStartRequest:
       type: object

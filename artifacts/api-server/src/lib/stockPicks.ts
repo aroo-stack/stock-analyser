@@ -156,7 +156,7 @@ Return ONLY valid JSON — an array of exactly 6 objects (no markdown, no backti
 ]`;
 
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
     const result = await model.generateContent(prompt);
     const content = result.response.text();
 

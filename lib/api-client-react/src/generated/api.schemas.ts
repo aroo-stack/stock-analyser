@@ -148,6 +148,18 @@ export interface QuantMetrics {
   /** @nullable */
   targetPrice?: number | null;
   /** @nullable */
+  targetLowPrice?: number | null;
+  /** @nullable */
+  targetHighPrice?: number | null;
+  /** @nullable */
+  targetMedianPrice?: number | null;
+  /** @nullable */
+  numberOfAnalysts?: number | null;
+  /** @nullable */
+  forwardEps?: number | null;
+  /** @nullable */
+  forwardEps2y?: number | null;
+  /** @nullable */
   supportLevel?: number | null;
   /** @nullable */
   resistanceLevel?: number | null;
@@ -281,6 +293,14 @@ export interface EarningsDateResult {
      * @nullable
      */
   earningsDate: string | null;
+}
+
+export interface CatalystResult {
+  ticker: string;
+  bulls: string[];
+  bears: string[];
+  generatedAt: string;
+  cached?: boolean;
 }
 
 export interface ChatStartRequest {

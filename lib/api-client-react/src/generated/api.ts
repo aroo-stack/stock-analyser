@@ -21,6 +21,7 @@ import type {
 
 import type {
   ApiError,
+  CatalystResult,
   ChatMessageRequest,
   ChatMessageResponse,
   ChatStartRequest,
@@ -443,6 +444,83 @@ export function useFindStocks<TData = Awaited<ReturnType<typeof findStocks>>, TE
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getFindStocksQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetStockCatalystsUrl = (ticker: string,) => {
+
+
+
+
+  return `/api/stocks/${ticker}/catalysts`
+}
+
+/**
+ * @summary Get AI-generated bull/bear catalysts for a stock
+ */
+export const getStockCatalysts = async (ticker: string, options?: RequestInit): Promise<CatalystResult> => {
+
+  return customFetch<CatalystResult>(getGetStockCatalystsUrl(ticker),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStockCatalystsQueryKey = (ticker: string,) => {
+    return [
+    `/api/stocks/${ticker}/catalysts`
+    ] as const;
+    }
+
+
+export const getGetStockCatalystsQueryOptions = <TData = Awaited<ReturnType<typeof getStockCatalysts>>, TError = ErrorType<void>>(ticker: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStockCatalysts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStockCatalystsQueryKey(ticker);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStockCatalysts>>> = ({ signal }) => getStockCatalysts(ticker, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(ticker), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStockCatalysts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetStockCatalystsQueryResult = NonNullable<Awaited<ReturnType<typeof getStockCatalysts>>>
+export type GetStockCatalystsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get AI-generated bull/bear catalysts for a stock
+ */
+
+export function useGetStockCatalysts<TData = Awaited<ReturnType<typeof getStockCatalysts>>, TError = ErrorType<void>>(
+ ticker: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStockCatalysts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetStockCatalystsQueryOptions(ticker,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

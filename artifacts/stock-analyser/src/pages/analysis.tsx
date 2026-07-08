@@ -23,6 +23,8 @@ import LiveNews from "@/components/analysis/LiveNews";
 import SimpleExplanation from "@/components/analysis/SimpleExplanation";
 import EarningsBanner from "@/components/analysis/EarningsBanner";
 import BottomLine from "@/components/analysis/BottomLine";
+import ScenarioEngine from "@/components/analysis/ScenarioEngine";
+import CatalystAnalysis from "@/components/analysis/CatalystAnalysis";
 import ComparisonView from "@/components/analysis/ComparisonView";
 import ChatPanel from "@/components/analysis/ChatPanel";
 import { useWatchlist } from "@/hooks/use-watchlist";
@@ -226,6 +228,22 @@ export default function Analysis() {
                 )}
               </div>
             </div>
+
+            {/* Scenario Engine + Catalyst Analysis */}
+            <div className="border-t border-border pt-8 space-y-6">
+              <ScenarioEngine
+                quant={analysis.quant as any}
+                currentPrice={analysis.performance.currentPrice}
+              />
+              <CatalystAnalysis ticker={ticker} />
+            </div>
+
+            {/* Bottom Line */}
+            {(analysis as any).bottomLine && (
+              <div className="border-t border-border pt-8">
+                <BottomLine data={(analysis as any).bottomLine} currentPrice={analysis.performance.currentPrice} />
+              </div>
+            )}
 
             {/* Plain English section */}
             {analysis.simpleExplanation && (
