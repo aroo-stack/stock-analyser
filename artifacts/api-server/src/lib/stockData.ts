@@ -303,14 +303,17 @@ export async function searchTickers(
   { ticker: string; name: string; exchange: string | null; type: string | null }[]
 > {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const results: any = await yf.search(query, { quotesCount: 10 }, { validateResult: false });
+  const results: any = await yf.search(query, { quotesCount: 20 }, { validateResult: false });
+  const ALLOWED_TYPES = new Set(["EQUITY", "ETF", "MUTUALFUND"]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (results?.quotes ?? []).filter((r: any) => r.symbol && (r.shortname || r.longname)).map((r: any) => ({
-    ticker: r.symbol,
-    name: r.shortname ?? r.longname ?? r.symbol,
-    exchange: r.exchDisp ?? r.exchange ?? null,
-    type: r.quoteType ?? null,
-  }));
+  return (results?.quotes ?? [])
+    .filter((r: any) => r.symbol && (r.shortname || r.longname) && ALLOWED_TYPES.has(r.quoteType))
+    .map((r: any) => ({
+      ticker: r.symbol,
+      name: r.shortname ?? r.longname ?? r.symbol,
+      exchange: r.exchDisp ?? r.exchange ?? null,
+      type: r.quoteType ?? null,
+    }));
 }
 
 export function calcTrendDirection(

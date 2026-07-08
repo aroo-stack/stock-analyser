@@ -19,6 +19,7 @@ interface QuantData {
 interface Props {
   quant: QuantData;
   currentPrice: number;
+  currency?: string;
 }
 
 function pct(target: number, current: number) {
@@ -304,7 +305,19 @@ function ValuationTable({ forwardEps, forwardEps2y, targetLow, targetMean, targe
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function ScenarioEngine({ quant, currentPrice }: Props) {
+function currencySymbol(code?: string): string {
+  if (!code) return "$";
+  const map: Record<string, string> = {
+    USD: "$", AUD: "A$", GBP: "£", EUR: "€", CAD: "C$",
+    JPY: "¥", HKD: "HK$", CNY: "¥", INR: "₹", KRW: "₩",
+    SGD: "S$", NZD: "NZ$", SEK: "kr", NOK: "kr", DKK: "kr",
+    ZAR: "R", BRL: "R$", CHF: "CHF",
+  };
+  return map[code] ?? code;
+}
+
+export default function ScenarioEngine({ quant, currentPrice, currency }: Props) {
+  const sym = currencySymbol(currency);
   const {
     targetLowPrice: low,
     targetHighPrice: high,
@@ -378,7 +391,7 @@ export default function ScenarioEngine({ quant, currentPrice }: Props) {
 
       {/* Content */}
       {tab === "targets" && hasTargets && low != null && high != null && meanPrice != null && (
-        <TargetBar low={low} mean={meanPrice} high={high} current={currentPrice} />
+        <TargetBar low={low} mean={meanPrice} high={high} current={currentPrice} currency={sym} />
       )}
 
       {tab === "pe" && hasEPS && forwardEps != null && (
@@ -388,6 +401,7 @@ export default function ScenarioEngine({ quant, currentPrice }: Props) {
           forwardPE={forwardPE ?? null}
           trailingEps={quant.eps ?? null}
           currentPrice={currentPrice}
+          currency={sym}
         />
       )}
 
@@ -400,6 +414,7 @@ export default function ScenarioEngine({ quant, currentPrice }: Props) {
           targetHigh={high ?? null}
           forwardPE={forwardPE ?? null}
           currentPrice={currentPrice}
+          currency={sym}
         />
       )}
     </Card>

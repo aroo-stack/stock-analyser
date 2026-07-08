@@ -148,18 +148,57 @@ function PicksSkeleton() {
   );
 }
 
+// Map common exchange prefixes (e.g. "ASX:MYR") to Yahoo Finance suffixes (e.g. "MYR.AX")
+const EXCHANGE_SUFFIX: Record<string, string> = {
+  ASX: ".AX",   // Australia
+  LSE: ".L",    // London
+  TSX: ".TO",   // Toronto
+  TSXV: ".V",   // Toronto Venture
+  HKG: ".HK",   // Hong Kong
+  TYO: ".T",    // Tokyo
+  FRA: ".DE",   // Frankfurt
+  PAR: ".PA",   // Paris
+  AMS: ".AS",   // Amsterdam
+  NSE: ".NS",   // India (National)
+  BSE: ".BO",   // India (Bombay)
+  SGX: ".SI",   // Singapore
+  NZX: ".NZ",   // New Zealand
+  KRX: ".KS",   // South Korea
+  STO: ".ST",   // Stockholm
+  JSE: ".JO",   // Johannesburg
+  MIL: ".MI",   // Milan
+  BRU: ".BR",   // Brussels
+  CPH: ".CO",   // Copenhagen
+  HEL: ".HE",   // Helsinki
+};
+
+function normalizeQuery(input: string): string {
+  const trimmed = input.trim();
+  const colonMatch = trimmed.match(/^([A-Za-z]{2,5}):([A-Za-z0-9.]+)$/);
+  if (colonMatch) {
+    const exchange = colonMatch[1].toUpperCase();
+    const ticker = colonMatch[2].toUpperCase();
+    const suffix = EXCHANGE_SUFFIX[exchange];
+    if (suffix) return `${ticker}${suffix}`;
+  }
+  return trimmed;
+}
+
 export default function Home() {
   const [, setLocation] = useLocation();
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebounce(query, 300);
   const { watchlist, toggle: toggleWatchlist } = useWatchlist();
 
+  const normalizedQuery = normalizeQuery(debouncedQuery);
+  const isExchangeFormat = debouncedQuery.includes(":") && normalizedQuery !== debouncedQuery;
+
   const { data: searchResults, isLoading: isSearching } = useFindStocks(
-    { q: debouncedQuery },
+    { q: normalizedQuery },
     {
       query: {
-        enabled: debouncedQuery.length >= 2,
-        queryKey: getFindStocksQueryKey({ q: debouncedQuery }),
+        enabled: normalizedQuery.length >= 2,
+        queryKey: getFindStocksQueryKey({ q: normalizedQuery }),
       },
     }
   );
@@ -177,7 +216,7 @@ export default function Home() {
   });
 
   const handleSelectTicker = (ticker: string) => {
-    setLocation(`/analyse/${ticker.toUpperCase()}`);
+    setLocation(`/analyse/${ticker}`);
   };
 
   return (
@@ -213,8 +252,14 @@ export default function Home() {
               data-testid="input-ticker-search"
             />
 
-            {debouncedQuery.length >= 2 && (
-              <Card className="absolute top-full mt-2 w-full max-h-[300px] overflow-auto z-50 bg-popover border-border shadow-xl">
+            {isExchangeFormat && (
+              <div className="absolute top-full mt-1 left-0 text-[11px] font-mono text-sky-400 px-1">
+                Searching as <span className="font-bold">{normalizedQuery}</span>
+              </div>
+            )}
+
+            {normalizedQuery.length >= 2 && (
+              <Card className={`absolute w-full max-h-[300px] overflow-auto z-50 bg-popover border-border shadow-xl ${isExchangeFormat ? "top-[calc(100%+1.5rem)]" : "top-full"} mt-2`}>
                 {isSearching ? (
                   <div className="p-4 space-y-3">
                     <Skeleton className="h-10 w-full" />

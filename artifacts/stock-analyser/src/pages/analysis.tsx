@@ -231,6 +231,7 @@ export default function Analysis() {
                 <ScenarioEngine
                   quant={analysis.quant as any}
                   currentPrice={analysis.performance.currentPrice}
+                  currency={analysis.overview.currency}
                 />
               </div>
             </div>
