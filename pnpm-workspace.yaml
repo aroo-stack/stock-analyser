@@ -1,5 +1,6 @@
 packages:
-  - artifacts/*
+  - artifacts/api-server
+  - artifacts/stock-analyser
   - lib/*
   - lib/integrations/*
   - scripts
