@@ -682,6 +682,29 @@ export interface PortfolioAnalysis {
   generatedAt: string;
 }
 
+export type SectorDataTrend = typeof SectorDataTrend[keyof typeof SectorDataTrend];
+
+
+export const SectorDataTrend = {
+  up: 'up',
+  down: 'down',
+  flat: 'flat',
+} as const;
+
+export interface SectorData {
+  sector: string;
+  etf: string;
+  color: string;
+  /** @nullable */
+  change1dPct?: number | null;
+  /** @nullable */
+  change1wPct?: number | null;
+  /** @nullable */
+  change1mPct?: number | null;
+  currentPrice: number;
+  trend: SectorDataTrend;
+}
+
 export type FetchPriceHistoryParams = {
 period?: FetchPriceHistoryPeriod;
 };

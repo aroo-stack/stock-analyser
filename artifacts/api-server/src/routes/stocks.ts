@@ -11,8 +11,9 @@ import {
 } from "../lib/stockData";
 import { generateStockAIAnalysis } from "../lib/stockAI";
 import { getAIStockPicks } from "../lib/stockPicks";
-import { computeBottomLine } from "../lib/bottomLine";
+import { computeBottomLine, computeTimingScore } from "../lib/bottomLine";
 import { generateCatalysts } from "../lib/stockCatalysts";
+import { fetchSectorHeatmap } from "../lib/sectorData";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -273,6 +274,7 @@ router.get("/stocks/:ticker/analysis", async (req, res): Promise<void> => {
         disclaimer: aiAnalysis.suggestion.disclaimer,
       },
       bottomLine,
+      timingScore: computeTimingScore(bottomLine),
       generatedAt: new Date().toISOString(),
     };
 
@@ -339,6 +341,17 @@ router.get("/stocks/:ticker/earnings", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err, ticker }, "Earnings date fetch failed");
     res.status(500).json({ error: "Failed to fetch earnings date" });
+  }
+});
+
+// GET /stocks/sectors/heatmap
+router.get("/stocks/sectors/heatmap", async (req, res): Promise<void> => {
+  try {
+    const data = await fetchSectorHeatmap();
+    res.json(data);
+  } catch (err: any) {
+    req.log.error({ err: err.message }, "Sector heatmap fetch failed");
+    res.status(500).json({ error: "Failed to fetch sector heatmap" });
   }
 });
 

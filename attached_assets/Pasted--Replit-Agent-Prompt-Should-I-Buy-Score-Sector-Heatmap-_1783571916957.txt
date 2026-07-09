@@ -1,0 +1,405 @@
+# Replit Agent Prompt — Should I Buy Score + Sector Heatmap + PDF Export
+
+Paste this entire prompt into the Replit Agent chat:
+
+---
+
+Add three new features to the existing Stock Analyser app. Implement them one at a time, testing each before moving to the next. Do not break any existing functionality.
+
+---
+
+## FEATURE 1 — "Should I Buy Now?" Timing Score
+
+This is a separate score from the existing Bottom Line composite score. The Bottom Line scores the stock's overall quality. This scores the TIMING — is RIGHT NOW a good entry point, or should the user wait?
+
+### Backend — add to `artifacts/api-server/src/lib/bottomLine.ts`
+
+Add a new exported interface and function alongside the existing `computeBottomLine`:
+
+```typescript
+export interface TimingScore {
+  score: number;              // 0–100 (100 = best time to buy)
+  label: "Buy Now" | "Leaning Yes" | "Wait" | "Leaning No" | "Avoid";
+  colour: "green" | "amber" | "red";
+  summary: string;            // 1 plain-English sentence
+  signals: {
+    rsiSignal:        "oversold" | "neutral" | "overbought" | null;
+    bollingerSignal:  "near_low" | "middle" | "near_high" | null;
+    macdSignal:       "bullish_crossover" | "bullish" | "bearish" | "bearish_crossover" | null;
+    momentumSignal:   "accelerating" | "stable" | "decelerating" | null;
+    fiftyTwoWeekSignal: "near_low" | "middle" | "near_high" | null;
+    obvSignal:        "confirming" | "diverging" | null;
+    atrSignal:        "low_volatility" | "normal" | "high_volatility" | null;
+    williamsRSignal:  "oversold" | "neutral" | "overbought" | null;
+  };
+  bestCaseEntry: string;     // plain English, e.g. "RSI is cooling and price is near support"
+  riskToEntry: string;       // plain English, e.g. "Momentum is slowing and volatility is high"
+}
+
+export function computeTimingScore(bottomLine: BottomLineResult): TimingScore
+```
+
+Implement `computeTimingScore` using the already-computed signals inside the `BottomLineResult` object — no extra data fetching needed:
+
+**RSI Signal & Score contribution (20%)**
+```
+rsi < 30:  rsiSignal = "oversold",   score contribution = 90  (historically good entry)
+rsi 30–45: rsiSignal = "neutral",    score contribution = 70
+rsi 45–55: rsiSignal = "neutral",    score contribution = 55
+rsi 55–65: rsiSignal = "neutral",    score contribution = 45
+rsi 65–70: rsiSignal = "neutral",    score contribution = 30
+rsi > 70:  rsiSignal = "overbought", score contribution = 10  (chasing the top)
+null:       score contribution = 50
+```
+
+**Bollinger Position Signal & Score (15%)**
+```
+bollingerPosition < 20:  bollingerSignal = "near_low",  score = 90  (price near lower band = value)
+bollingerPosition 20–40: bollingerSignal = "middle",    score = 65
+bollingerPosition 40–60: bollingerSignal = "middle",    score = 50
+bollingerPosition 60–80: bollingerSignal = "middle",    score = 35
+bollingerPosition > 80:  bollingerSignal = "near_high", score = 10  (stretched)
+null: score = 50
+```
+
+**MACD Signal & Score (20%)**
+```
+Derive from macdLine, macdSignalLine, macdHistogram:
+  macdLine just crossed above signalLine (histogram was negative last period, now positive):
+    macdSignal = "bullish_crossover", score = 95
+  macdLine > signalLine and histogram > 0:
+    macdSignal = "bullish", score = 70
+  macdLine just crossed below signalLine:
+    macdSignal = "bearish_crossover", score = 5
+  macdLine < signalLine:
+    macdSignal = "bearish", score = 25
+  neutral: score = 50
+Note: since we only have final values (not history), use:
+  if macd = "bullish" and histogram > 0 and abs(histogram) < abs(macdLine) * 0.1: "bullish_crossover"
+  if macd = "bearish" and histogram < 0 and abs(histogram) < abs(macdLine) * 0.1: "bearish_crossover"
+  else use the existing macd field value
+```
+
+**Momentum Signal & Score (15%)**
+```
+Derived from roc20 (20-day rate of change):
+  roc20 > 5%:          momentumSignal = "accelerating", score = 75
+  roc20 0–5%:          momentumSignal = "stable",       score = 55
+  roc20 -5% to 0%:     momentumSignal = "decelerating", score = 35
+  roc20 < -5%:         momentumSignal = "decelerating", score = 20
+  null: score = 50
+```
+
+**52-Week Position Signal & Score (15%)**
+```
+fiftyTwoWeekPosition < 25%:  fiftyTwoWeekSignal = "near_low",  score = 85  (buying near lows)
+fiftyTwoWeekPosition 25–60%: fiftyTwoWeekSignal = "middle",    score = 55
+fiftyTwoWeekPosition 60–80%: fiftyTwoWeekSignal = "middle",    score = 40
+fiftyTwoWeekPosition > 80%:  fiftyTwoWeekSignal = "near_high", score = 15  (near highs)
+null: score = 50
+```
+
+**OBV Signal & Score (10%)**
+```
+obvTrend = "rising":  obvSignal = "confirming", score = 70   (volume backing the move)
+obvTrend = "falling": obvSignal = "diverging",  score = 30   (volume not confirming)
+obvTrend = "flat":    obvSignal = "confirming", score = 50
+null: score = 50
+```
+
+**ATR / Volatility Signal & Score (5%)**
+```
+Use historicalVolatility30d:
+  < 20%:  atrSignal = "low_volatility",  score = 65   (stable entry conditions)
+  20–40%: atrSignal = "normal",          score = 50
+  > 40%:  atrSignal = "high_volatility", score = 30   (risky entry)
+null: score = 50
+```
+
+**Williams %R Signal & Score (0% weight — signal display only)**
+```
+williamsR < -80: williamsRSignal = "oversold"
+williamsR > -20: williamsRSignal = "overbought"
+else:            williamsRSignal = "neutral"
+Display only — don't include in score weighting.
+```
+
+**Composite Timing Score**
+```
+timingScore = rsiScore×0.20 + bollingerScore×0.15 + macdScore×0.20 +
+              momentumScore×0.15 + fiftyTwoWeekScore×0.15 + obvScore×0.10 + atrScore×0.05
+Round to nearest integer. Clamp 0–100.
+```
+
+**Label thresholds**
+```
+80–100: "Buy Now",     colour: "green"
+65–79:  "Leaning Yes", colour: "green"
+45–64:  "Wait",        colour: "amber"
+30–44:  "Leaning No",  colour: "red"
+0–29:   "Avoid",       colour: "red"
+```
+
+**Summary sentence — build from signals:**
+```typescript
+function buildTimingSummary(s: TimingScore["signals"], score: number): string {
+  const parts: string[] = [];
+  if (s.rsiSignal === "oversold") parts.push("RSI is oversold");
+  if (s.rsiSignal === "overbought") parts.push("RSI is overbought");
+  if (s.bollingerSignal === "near_low") parts.push("price is near Bollinger support");
+  if (s.bollingerSignal === "near_high") parts.push("price is stretched above Bollinger bands");
+  if (s.macdSignal === "bullish_crossover") parts.push("MACD just turned bullish");
+  if (s.macdSignal === "bearish_crossover") parts.push("MACD just turned bearish");
+  if (s.fiftyTwoWeekSignal === "near_low") parts.push("trading near its 52-week low");
+  if (s.fiftyTwoWeekSignal === "near_high") parts.push("trading near its 52-week high");
+  if (s.momentumSignal === "accelerating") parts.push("momentum is building");
+  if (s.momentumSignal === "decelerating") parts.push("momentum is fading");
+  if (s.obvSignal === "diverging") parts.push("volume is not confirming the move");
+
+  if (parts.length === 0) return score >= 60
+    ? "Conditions are broadly neutral but leaning positive for entry."
+    : "Conditions are broadly neutral — no strong timing signal either way.";
+
+  const positive = parts.filter(p => !p.includes("overbought") && !p.includes("bearish") && !p.includes("near_high") && !p.includes("fading") && !p.includes("not confirming"));
+  const negative = parts.filter(p => !positive.includes(p));
+
+  if (positive.length > 0 && negative.length === 0)
+    return `Timing looks favourable — ${positive.join(", ")}.`;
+  if (negative.length > 0 && positive.length === 0)
+    return `Timing looks unfavourable — ${negative.join(", ")}.`;
+  return `Mixed signals — ${positive.join(", ")}, but ${negative.join(", ")}.`;
+}
+```
+
+**bestCaseEntry and riskToEntry — build from signals:**
+```typescript
+bestCaseEntry: build a sentence listing the positive timing signals
+riskToEntry: build a sentence listing the negative timing signals
+If no signals in that bucket: use a neutral fallback sentence
+```
+
+### Update `artifacts/api-server/src/routes/stocks.ts`
+
+After calling `computeBottomLine`, also call `computeTimingScore(bottomLine)` and add `timingScore` to the analysis response object. Include it in the 15-minute cache.
+
+### Update API schema
+
+Add `timingScore: TimingScore` to the StockAnalysis schema in the OpenAPI spec and regenerate (or manually add the type to the api-client-react types).
+
+### Frontend — new file: `artifacts/stock-analyser/src/components/analysis/TimingScore.tsx`
+
+Props: `data: TimingScore, currentPrice: number`
+
+Layout (dark Card, placed directly BELOW the existing BottomLine card and ABOVE Overview):
+
+**Row 1 — Header**
+- Icon: clock or crosshair icon (lucide)
+- Title: "Should I Buy Now?"
+- Subtitle: "Based on technical timing signals"
+
+**Row 2 — Score display**
+- Large coloured number: the timing score (0–100)
+- Label badge: "BUY NOW" / "LEANING YES" / "WAIT" / "LEANING NO" / "AVOID" — colour coded green/amber/red
+- Summary sentence below in muted text
+
+**Row 3 — Signal pills (2-column grid)**
+Show all 7 signals as small pills with icons:
+- RSI: 🟢 Oversold / ⚪ Neutral / 🔴 Overbought
+- Bollinger: 🟢 Near Support / ⚪ Middle / 🔴 Stretched
+- MACD: 🟢 Bullish Crossover / 🟢 Bullish / 🔴 Bearish / 🔴 Bearish Crossover
+- Momentum: 🟢 Accelerating / ⚪ Stable / 🔴 Decelerating
+- 52-Week: 🟢 Near Low / ⚪ Mid-Range / 🔴 Near High
+- Volume (OBV): 🟢 Confirming / 🔴 Diverging
+- Volatility: 🟢 Low / ⚪ Normal / 🔴 High
+
+**Row 4 — Entry context**
+Two small boxes side by side:
+- "Why now could be good": bestCaseEntry text in green-tinted box
+- "Risk to this entry": riskToEntry text in red-tinted box
+
+**Row 5 — Disclaimer**
+Small muted text: "Timing signals are based on technical indicators only. Not financial advice."
+
+Update `artifacts/stock-analyser/src/pages/analysis.tsx` to render `<TimingScore>` between BottomLine and Overview, only if `analysis.timingScore` exists.
+
+---
+
+## FEATURE 2 — Sector Heatmap on Home Page
+
+### Backend — new file: `artifacts/api-server/src/lib/sectorData.ts`
+
+Define a representative ticker for each major sector and fetch live data:
+
+```typescript
+const SECTOR_ETFS: Record<string, { etf: string; name: string; color: string }> = {
+  "Technology":        { etf: "XLK",  name: "Technology",        color: "#6366f1" },
+  "Healthcare":        { etf: "XLV",  name: "Healthcare",        color: "#22c55e" },
+  "Financials":        { etf: "XLF",  name: "Financials",        color: "#f59e0b" },
+  "Consumer Discret.": { etf: "XLY",  name: "Consumer Discret.", color: "#ec4899" },
+  "Industrials":       { etf: "XLI",  name: "Industrials",       color: "#8b5cf6" },
+  "Energy":            { etf: "XLE",  name: "Energy",            color: "#f97316" },
+  "Utilities":         { etf: "XLU",  name: "Utilities",         color: "#06b6d4" },
+  "Real Estate":       { etf: "XLRE", name: "Real Estate",       color: "#84cc16" },
+  "Materials":         { etf: "XLB",  name: "Materials",         color: "#a78bfa" },
+  "Comm. Services":    { etf: "XLC",  name: "Comm. Services",    color: "#fb7185" },
+  "Consumer Staples":  { etf: "XLP",  name: "Consumer Staples",  color: "#34d399" },
+};
+
+export interface SectorData {
+  sector: string;
+  etf: string;
+  color: string;
+  change1dPct: number | null;
+  change1wPct: number | null;
+  change1mPct: number | null;
+  currentPrice: number;
+  trend: "up" | "down" | "flat";
+}
+
+export async function fetchSectorHeatmap(): Promise<SectorData[]>
+```
+
+Implement `fetchSectorHeatmap`:
+- Use `Promise.allSettled` to fetch all 11 sector ETFs using the existing `fetchQuote` function
+- For each ETF compute `change1dPct` from `currentPrice` and `previousClose`
+- Fetch 1-month history to compute `change1wPct` (5 trading days ago) and `change1mPct` (21 days ago)
+- Sort by `change1dPct` descending
+- Cache results for 10 minutes in a module-level variable
+
+### Backend — new route in `artifacts/api-server/src/routes/stocks.ts`
+
+Add: `GET /stocks/sectors/heatmap`
+- Call `fetchSectorHeatmap()`
+- Return the array
+- Add to OpenAPI spec
+
+### Frontend — new component: `artifacts/stock-analyser/src/components/home/SectorHeatmap.tsx`
+
+Place this on the home page BELOW the search bar and popular tickers, ABOVE the AI Picks section.
+
+**Layout:**
+- Section header: "MARKET SECTORS TODAY" with a refresh button
+- A time period toggle: "1D / 1W / 1M" — switches which change % is displayed
+- 11 sector tiles in a responsive grid (3-4 columns on desktop, 2 on mobile)
+
+**Each tile shows:**
+- Sector name
+- ETF ticker in small muted text (e.g. "XLK")
+- Change % in large bold text — green if positive, red if negative
+- A subtle background fill intensity based on magnitude (darker green/red = bigger move)
+- A small trend arrow icon
+
+**Colour logic:**
+```
+change > +2%:  deep green background
+change +1–2%:  medium green
+change 0–1%:   light green
+change 0 to -1%: light red
+change -1 to -2%: medium red
+change < -2%:  deep red
+```
+
+**Loading state:** show skeleton tiles while fetching
+**Error state:** show "Sector data unavailable" gracefully
+
+Update `artifacts/stock-analyser/src/pages/home.tsx` to import and render `<SectorHeatmap />` in the correct position.
+
+---
+
+## FEATURE 3 — Export to PDF Report
+
+### Frontend — new component: `artifacts/stock-analyser/src/components/analysis/ExportPDF.tsx`
+
+This is a purely frontend feature — no backend changes needed. Use the browser's built-in `window.print()` with a custom print stylesheet, plus `jspdf` and `html2canvas` if available, or just use CSS print media query approach which requires zero new dependencies.
+
+**Approach — CSS print media (no new dependencies):**
+
+Add a button "Export PDF" (with a download icon) to the analysis page header, next to the existing refresh/bookmark buttons.
+
+When clicked:
+1. Add a CSS class `printing` to the document body
+2. Call `window.print()`
+3. Remove the class after
+
+Create a print stylesheet (can be inline in a `<style>` tag injected into the document head) that:
+- Hides: the sidebar/nav, search bar, chat panel, comparison view, header buttons, earnings banner
+- Shows: ticker name, company name, current price, Bottom Line card, Timing Score card, Overview, Price Performance, Quant Metrics, Growth Analysis, AI Suggestion
+- Sets background to white, text to black
+- Adds a report header at the top: "QUANTTERM Stock Report — [TICKER] — Generated [date]"
+- Adds a footer: "Generated by QuantTerm. Not financial advice."
+- Forces page breaks between major sections
+- Makes charts and cards print cleanly (remove shadows, borders become light grey)
+- Sets font to a clean sans-serif
+
+**The print button:**
+```tsx
+function ExportPDF({ ticker, companyName }: { ticker: string; companyName: string }) {
+  const handleExport = () => {
+    // Set document title so the PDF filename is meaningful
+    const originalTitle = document.title;
+    document.title = `QuantTerm_${ticker}_Report_${new Date().toISOString().split("T")[0]}`;
+    window.print();
+    document.title = originalTitle;
+  };
+  return (
+    <button onClick={handleExport} title="Export PDF">
+      {/* Download icon from lucide */}
+    </button>
+  );
+}
+```
+
+**Add print styles** as a `<style media="print">` block in the app's main HTML file (`index.html`) or injected via a `useEffect` in the component:
+
+```css
+@media print {
+  /* Hide non-essential UI */
+  nav, .chat-panel, .comparison-view, .search-bar,
+  .earnings-banner, .export-btn, .bookmark-btn,
+  .refresh-btn, .header-actions { display: none !important; }
+
+  /* Reset colors for print */
+  body { background: white !important; color: black !important; }
+  .card { background: white !important; border: 1px solid #e5e7eb !important; box-shadow: none !important; }
+  
+  /* Report header */
+  .print-header { display: block !important; }
+
+  /* Page breaks */
+  .bottom-line-card { page-break-after: always; }
+  .overview-card { page-break-inside: avoid; }
+
+  /* Make text readable */
+  * { color: black !important; }
+  .text-emerald-400, .text-green-400 { color: #16a34a !important; }
+  .text-red-400 { color: #dc2626 !important; }
+  .text-amber-400 { color: #d97706 !important; }
+  .text-muted-foreground { color: #6b7280 !important; }
+}
+
+.print-header { display: none; }
+```
+
+Add a `<div className="print-header">` at the top of the analysis page that only shows when printing:
+```tsx
+<div className="print-header">
+  <h1>QuantTerm Stock Report</h1>
+  <p>{ticker} — {companyName} — Generated {new Date().toLocaleDateString()}</p>
+  <hr />
+</div>
+```
+
+Update `artifacts/stock-analyser/src/pages/analysis.tsx`:
+- Import and render `<ExportPDF>` button in the page header alongside existing buttons
+- Add the print-header div at the top of the page content
+
+---
+
+## General instructions
+
+- Implement Feature 1 first, test with AAPL, then Feature 2, then Feature 3
+- Keep all existing features working — purely additive
+- Follow existing TypeScript strict mode, Tailwind dark theme, shadcn/ui components, and logger patterns
+- For any new API routes, follow the existing error handling pattern (try/catch, logger.error, proper status codes)
+- The Sector Heatmap and Timing Score should have skeleton loading states matching the existing app style
+- Test the PDF export by actually printing to PDF in the browser preview

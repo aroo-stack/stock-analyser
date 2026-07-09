@@ -292,6 +292,23 @@ export const FindStocksResponse = zod.array(FindStocksResponseItem)
 
 
 /**
+ * Returns live performance data for all major S&P 500 sector ETFs
+ * @summary Get sector performance heatmap
+ */
+export const GetSectorHeatmapResponseItem = zod.object({
+  "sector": zod.string(),
+  "etf": zod.string(),
+  "color": zod.string(),
+  "change1dPct": zod.number().nullish(),
+  "change1wPct": zod.number().nullish(),
+  "change1mPct": zod.number().nullish(),
+  "currentPrice": zod.number(),
+  "trend": zod.enum(['up', 'down', 'flat'])
+})
+export const GetSectorHeatmapResponse = zod.array(GetSectorHeatmapResponseItem)
+
+
+/**
  * @summary Get AI-generated bull/bear catalysts for a stock
  */
 export const GetStockCatalystsParams = zod.object({

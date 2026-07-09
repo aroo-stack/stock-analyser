@@ -936,3 +936,179 @@ export function computeBottomLine(
     };
   }
 }
+
+// ─── Timing Score ────────────────────────────────────────────────────────────
+
+export interface TimingScore {
+  score: number;
+  label: "Buy Now" | "Leaning Yes" | "Wait" | "Leaning No" | "Avoid";
+  colour: "green" | "amber" | "red";
+  summary: string;
+  signals: {
+    rsiSignal:          "oversold" | "neutral" | "overbought" | null;
+    bollingerSignal:    "near_low" | "middle" | "near_high" | null;
+    macdSignal:         "bullish_crossover" | "bullish" | "bearish" | "bearish_crossover" | null;
+    momentumSignal:     "accelerating" | "stable" | "decelerating" | null;
+    fiftyTwoWeekSignal: "near_low" | "middle" | "near_high" | null;
+    obvSignal:          "confirming" | "diverging" | null;
+    atrSignal:          "low_volatility" | "normal" | "high_volatility" | null;
+    williamsRSignal:    "oversold" | "neutral" | "overbought" | null;
+  };
+  bestCaseEntry: string;
+  riskToEntry: string;
+}
+
+function buildTimingSummary(signals: TimingScore["signals"], score: number): string {
+  const parts: string[] = [];
+  if (signals.rsiSignal === "oversold") parts.push("RSI is oversold");
+  if (signals.rsiSignal === "overbought") parts.push("RSI is overbought");
+  if (signals.bollingerSignal === "near_low") parts.push("price is near Bollinger support");
+  if (signals.bollingerSignal === "near_high") parts.push("price is stretched above Bollinger bands");
+  if (signals.macdSignal === "bullish_crossover") parts.push("MACD just turned bullish");
+  if (signals.macdSignal === "bearish_crossover") parts.push("MACD just turned bearish");
+  if (signals.fiftyTwoWeekSignal === "near_low") parts.push("trading near its 52-week low");
+  if (signals.fiftyTwoWeekSignal === "near_high") parts.push("trading near its 52-week high");
+  if (signals.momentumSignal === "accelerating") parts.push("momentum is building");
+  if (signals.momentumSignal === "decelerating") parts.push("momentum is fading");
+  if (signals.obvSignal === "diverging") parts.push("volume is not confirming the move");
+
+  if (parts.length === 0) return score >= 60
+    ? "Conditions are broadly neutral but leaning positive for entry."
+    : "Conditions are broadly neutral — no strong timing signal either way.";
+
+  const positive = parts.filter(p =>
+    !p.includes("overbought") && !p.includes("bearish") &&
+    !p.includes("near_high") && !p.includes("fading") && !p.includes("not confirming"));
+  const negative = parts.filter(p => !positive.includes(p));
+
+  if (positive.length > 0 && negative.length === 0) return `Timing looks favourable — ${positive.join(", ")}.`;
+  if (negative.length > 0 && positive.length === 0) return `Timing looks unfavourable — ${negative.join(", ")}.`;
+  return `Mixed signals — ${positive.join(", ")}, but ${negative.join(", ")}.`;
+}
+
+export function computeTimingScore(bl: BottomLineResult): TimingScore {
+  const s = bl.signals;
+
+  // RSI (20%)
+  let rsiSignal: TimingScore["signals"]["rsiSignal"] = null;
+  let rsiScore = 50;
+  if (s.rsi14 != null) {
+    if (s.rsi14 < 30)       { rsiSignal = "oversold";   rsiScore = 90; }
+    else if (s.rsi14 < 45)  { rsiSignal = "neutral";    rsiScore = 70; }
+    else if (s.rsi14 < 55)  { rsiSignal = "neutral";    rsiScore = 55; }
+    else if (s.rsi14 < 65)  { rsiSignal = "neutral";    rsiScore = 45; }
+    else if (s.rsi14 <= 70) { rsiSignal = "neutral";    rsiScore = 30; }
+    else                    { rsiSignal = "overbought"; rsiScore = 10; }
+  }
+
+  // Bollinger (15%)
+  let bollingerSignal: TimingScore["signals"]["bollingerSignal"] = null;
+  let bollingerScore = 50;
+  if (s.bollingerPosition != null) {
+    if (s.bollingerPosition < 20)      { bollingerSignal = "near_low";  bollingerScore = 90; }
+    else if (s.bollingerPosition < 40) { bollingerSignal = "middle";    bollingerScore = 65; }
+    else if (s.bollingerPosition < 60) { bollingerSignal = "middle";    bollingerScore = 50; }
+    else if (s.bollingerPosition < 80) { bollingerSignal = "middle";    bollingerScore = 35; }
+    else                               { bollingerSignal = "near_high"; bollingerScore = 10; }
+  }
+
+  // MACD (20%)
+  let macdSignal: TimingScore["signals"]["macdSignal"] = null;
+  let macdScore = 50;
+  if (s.macdLine != null && s.macdSignalLine != null && s.macdHistogram != null) {
+    const above = s.macdLine > s.macdSignalLine;
+    const histPos = s.macdHistogram > 0;
+    const isCross = s.macdLine !== 0 && Math.abs(s.macdHistogram) < Math.abs(s.macdLine) * 0.1;
+    if (above && histPos && isCross)    { macdSignal = "bullish_crossover"; macdScore = 95; }
+    else if (above && histPos)          { macdSignal = "bullish";           macdScore = 70; }
+    else if (!above && !histPos && isCross) { macdSignal = "bearish_crossover"; macdScore = 5; }
+    else if (!above)                    { macdSignal = "bearish";           macdScore = 25; }
+    else                                { macdSignal = "bullish";           macdScore = 55; }
+  } else if (s.macd === "bullish") { macdSignal = "bullish"; macdScore = 70; }
+  else if (s.macd === "bearish")   { macdSignal = "bearish"; macdScore = 25; }
+
+  // Momentum (15%)
+  let momentumSignal: TimingScore["signals"]["momentumSignal"] = null;
+  let momentumScore = 50;
+  if (s.roc20 != null) {
+    if (s.roc20 > 5)        { momentumSignal = "accelerating"; momentumScore = 75; }
+    else if (s.roc20 >= 0)  { momentumSignal = "stable";       momentumScore = 55; }
+    else if (s.roc20 >= -5) { momentumSignal = "decelerating"; momentumScore = 35; }
+    else                    { momentumSignal = "decelerating"; momentumScore = 20; }
+  }
+
+  // 52-Week Position (15%)
+  let fiftyTwoWeekSignal: TimingScore["signals"]["fiftyTwoWeekSignal"] = null;
+  let fiftyTwoWeekScore = 50;
+  if (s.fiftyTwoWeekPosition != null) {
+    if (s.fiftyTwoWeekPosition < 25)      { fiftyTwoWeekSignal = "near_low";  fiftyTwoWeekScore = 85; }
+    else if (s.fiftyTwoWeekPosition < 60) { fiftyTwoWeekSignal = "middle";    fiftyTwoWeekScore = 55; }
+    else if (s.fiftyTwoWeekPosition < 80) { fiftyTwoWeekSignal = "middle";    fiftyTwoWeekScore = 40; }
+    else                                  { fiftyTwoWeekSignal = "near_high"; fiftyTwoWeekScore = 15; }
+  }
+
+  // OBV (10%)
+  let obvSignal: TimingScore["signals"]["obvSignal"] = null;
+  let obvScore = 50;
+  if (s.obvTrend != null) {
+    if (s.obvTrend === "rising")      { obvSignal = "confirming"; obvScore = 70; }
+    else if (s.obvTrend === "falling") { obvSignal = "diverging";  obvScore = 30; }
+    else                              { obvSignal = "confirming"; obvScore = 50; }
+  }
+
+  // ATR / Volatility (5%)
+  let atrSignal: TimingScore["signals"]["atrSignal"] = null;
+  let atrScore = 50;
+  if (s.historicalVolatility30d != null) {
+    const hv = s.historicalVolatility30d * 100;
+    if (hv < 20)      { atrSignal = "low_volatility";  atrScore = 65; }
+    else if (hv <= 40) { atrSignal = "normal";          atrScore = 50; }
+    else              { atrSignal = "high_volatility"; atrScore = 30; }
+  }
+
+  // Williams %R (display only)
+  let williamsRSignal: TimingScore["signals"]["williamsRSignal"] = null;
+  if (s.williamsR != null) {
+    if (s.williamsR < -80)      williamsRSignal = "oversold";
+    else if (s.williamsR > -20) williamsRSignal = "overbought";
+    else                        williamsRSignal = "neutral";
+  }
+
+  const raw = rsiScore * 0.20 + bollingerScore * 0.15 + macdScore * 0.20 +
+              momentumScore * 0.15 + fiftyTwoWeekScore * 0.15 + obvScore * 0.10 + atrScore * 0.05;
+  const score = Math.max(0, Math.min(100, Math.round(raw)));
+
+  let label: TimingScore["label"];
+  let colour: TimingScore["colour"];
+  if (score >= 80)      { label = "Buy Now";     colour = "green"; }
+  else if (score >= 65) { label = "Leaning Yes"; colour = "green"; }
+  else if (score >= 45) { label = "Wait";        colour = "amber"; }
+  else if (score >= 30) { label = "Leaning No";  colour = "red"; }
+  else                  { label = "Avoid";        colour = "red"; }
+
+  const signals = { rsiSignal, bollingerSignal, macdSignal, momentumSignal, fiftyTwoWeekSignal, obvSignal, atrSignal, williamsRSignal };
+  const summary = buildTimingSummary(signals, score);
+
+  const pos: string[] = [];
+  const neg: string[] = [];
+  if (rsiSignal === "oversold")           pos.push("RSI is oversold");
+  if (rsiSignal === "overbought")         neg.push("RSI is overbought");
+  if (bollingerSignal === "near_low")     pos.push("price is near Bollinger support");
+  if (bollingerSignal === "near_high")    neg.push("price is stretched above Bollinger bands");
+  if (macdSignal === "bullish_crossover" || macdSignal === "bullish") pos.push("MACD is bullish");
+  if (macdSignal === "bearish_crossover" || macdSignal === "bearish") neg.push("MACD is bearish");
+  if (fiftyTwoWeekSignal === "near_low")  pos.push("stock is near its 52-week low");
+  if (fiftyTwoWeekSignal === "near_high") neg.push("stock is near its 52-week high");
+  if (momentumSignal === "accelerating")  pos.push("momentum is building");
+  if (momentumSignal === "decelerating")  neg.push("momentum is fading");
+  if (obvSignal === "confirming")         pos.push("volume is confirming the move");
+  if (obvSignal === "diverging")          neg.push("volume is not confirming");
+  if (atrSignal === "low_volatility")     pos.push("low volatility provides stable entry conditions");
+  if (atrSignal === "high_volatility")    neg.push("high volatility makes entry risky");
+
+  return {
+    score, label, colour, summary, signals,
+    bestCaseEntry: pos.length > 0 ? `${pos.join(", ")}.` : "No strong positive timing signals at this time.",
+    riskToEntry:   neg.length > 0 ? `${neg.join(", ")}.` : "No major timing risks identified.",
+  };
+}

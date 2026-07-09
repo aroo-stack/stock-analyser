@@ -32,6 +32,7 @@ import type {
   HealthStatus,
   PortfolioAnalysis,
   PortfolioRequest,
+  SectorData,
   StockAnalysis,
   StockHistory,
   StockPick,
@@ -444,6 +445,84 @@ export function useFindStocks<TData = Awaited<ReturnType<typeof findStocks>>, TE
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getFindStocksQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetSectorHeatmapUrl = () => {
+
+
+
+
+  return `/api/stocks/sectors/heatmap`
+}
+
+/**
+ * Returns live performance data for all major S&P 500 sector ETFs
+ * @summary Get sector performance heatmap
+ */
+export const getSectorHeatmap = async ( options?: RequestInit): Promise<SectorData[]> => {
+
+  return customFetch<SectorData[]>(getGetSectorHeatmapUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSectorHeatmapQueryKey = () => {
+    return [
+    `/api/stocks/sectors/heatmap`
+    ] as const;
+    }
+
+
+export const getGetSectorHeatmapQueryOptions = <TData = Awaited<ReturnType<typeof getSectorHeatmap>>, TError = ErrorType<ApiError>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSectorHeatmap>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSectorHeatmapQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSectorHeatmap>>> = ({ signal }) => getSectorHeatmap({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSectorHeatmap>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSectorHeatmapQueryResult = NonNullable<Awaited<ReturnType<typeof getSectorHeatmap>>>
+export type GetSectorHeatmapQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary Get sector performance heatmap
+ */
+
+export function useGetSectorHeatmap<TData = Awaited<ReturnType<typeof getSectorHeatmap>>, TError = ErrorType<ApiError>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSectorHeatmap>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSectorHeatmapQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

@@ -18,6 +18,7 @@ import {
   type StockPick,
 } from "@workspace/api-client-react";
 import { useWatchlist } from "@/hooks/use-watchlist";
+import SectorHeatmap from "@/components/home/SectorHeatmap";
 
 const POPULAR_TICKERS = ["AAPL", "MSFT", "GOOGL", "NVDA", "AMZN", "META", "TSLA"];
 
@@ -296,6 +297,11 @@ export default function Home() {
                 )}
               </Card>
             )}
+          </div>
+
+          {/* Sector Heatmap */}
+          <div className="w-full">
+            <SectorHeatmap />
           </div>
 
           {/* Quick Launch */}

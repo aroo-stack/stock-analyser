@@ -23,6 +23,8 @@ import LiveNews from "@/components/analysis/LiveNews";
 import SimpleExplanation from "@/components/analysis/SimpleExplanation";
 import EarningsBanner from "@/components/analysis/EarningsBanner";
 import BottomLine from "@/components/analysis/BottomLine";
+import TimingScore from "@/components/analysis/TimingScore";
+import ExportPDF from "@/components/analysis/ExportPDF";
 import ScenarioEngine from "@/components/analysis/ScenarioEngine";
 import CatalystAnalysis from "@/components/analysis/CatalystAnalysis";
 import ComparisonView from "@/components/analysis/ComparisonView";
@@ -156,11 +158,19 @@ export default function Analysis() {
             )}
           </button>
 
+          {/* Export PDF */}
+          {analysis && (
+            <ExportPDF
+              ticker={ticker}
+              companyName={(analysis as any).overview?.companyName ?? ticker}
+            />
+          )}
+
           {/* Refresh */}
           <button
             onClick={() => refetch()}
             disabled={isRefetching || isLoading}
-            className="p-2 text-muted-foreground hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed rounded-md hover:bg-primary/5"
+            className="refresh-btn p-2 text-muted-foreground hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed rounded-md hover:bg-primary/5"
             data-testid="btn-refresh"
             title="Refresh Data"
           >
@@ -246,6 +256,13 @@ export default function Analysis() {
             {(analysis as any).bottomLine && (
               <div className="border-t border-border pt-8">
                 <BottomLine data={(analysis as any).bottomLine} currentPrice={analysis.performance.currentPrice} />
+              </div>
+            )}
+
+            {/* Timing Score */}
+            {(analysis as any).timingScore && (
+              <div className="border-t border-border pt-8">
+                <TimingScore data={(analysis as any).timingScore} />
               </div>
             )}
 

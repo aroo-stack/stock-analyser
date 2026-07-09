@@ -130,6 +130,28 @@ paths:
                 items:
                   $ref: "#/components/schemas/StockSearchResult"
 
+  /stocks/sectors/heatmap:
+    get:
+      operationId: getSectorHeatmap
+      tags: [stocks]
+      summary: Get sector performance heatmap
+      description: Returns live performance data for all major S&P 500 sector ETFs
+      responses:
+        "200":
+          description: Sector heatmap data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SectorData"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
   /stocks/{ticker}/catalysts:
     get:
       operationId: getStockCatalysts
@@ -1050,6 +1072,21 @@ components:
         currentRatio:       { type: ["number","null"] }
       required:
         - macd
+
+    SectorData:
+      type: object
+      properties:
+        sector:       { type: string }
+        etf:          { type: string }
+        color:        { type: string }
+        change1dPct:  { type: ["number", "null"] }
+        change1wPct:  { type: ["number", "null"] }
+        change1mPct:  { type: ["number", "null"] }
+        currentPrice: { type: number }
+        trend:
+          type: string
+          enum: ["up", "down", "flat"]
+      required: [sector, etf, color, currentPrice, trend]
 
     BottomLineResult:
       type: object
