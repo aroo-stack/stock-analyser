@@ -703,6 +703,7 @@ export interface SectorData {
   change1mPct?: number | null;
   currentPrice: number;
   trend: SectorDataTrend;
+  theme: boolean;
 }
 
 export type FetchPriceHistoryParams = {

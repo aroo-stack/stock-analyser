@@ -303,7 +303,8 @@ export const GetSectorHeatmapResponseItem = zod.object({
   "change1wPct": zod.number().nullish(),
   "change1mPct": zod.number().nullish(),
   "currentPrice": zod.number(),
-  "trend": zod.enum(['up', 'down', 'flat'])
+  "trend": zod.enum(['up', 'down', 'flat']),
+  "theme": zod.boolean()
 })
 export const GetSectorHeatmapResponse = zod.array(GetSectorHeatmapResponseItem)
 

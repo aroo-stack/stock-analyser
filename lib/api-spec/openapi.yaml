@@ -1086,7 +1086,8 @@ components:
         trend:
           type: string
           enum: ["up", "down", "flat"]
-      required: [sector, etf, color, currentPrice, trend]
+        theme:        { type: boolean }
+      required: [sector, etf, color, currentPrice, trend, theme]
 
     BottomLineResult:
       type: object
