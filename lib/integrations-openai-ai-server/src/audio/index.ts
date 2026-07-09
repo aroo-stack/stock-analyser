@@ -1,13 +1,3 @@
-export {
-  openai,
-  detectAudioFormat,
-  convertToWav,
-  ensureCompatibleFormat,
-  type AudioFormat,
-  voiceChat,
-  voiceChatStream,
-  textToSpeech,
-  textToSpeechStream,
-  speechToText,
-  speechToTextStream,
-} from "./client";
+// Replaced by Gemini
+export default null;
+export const openai = null;

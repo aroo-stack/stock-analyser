@@ -1,2 +1,3 @@
-// OpenAI integration replaced by Gemini
+// Replaced by Gemini
+export default null;
 export const openai = null;
