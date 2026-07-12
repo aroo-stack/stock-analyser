@@ -1,18 +1,16 @@
-import YahooFinance from "yahoo-finance2";
 import { logger } from "./logger";
 
-// yahoo-finance2 v3: default export is the class — must be instantiated
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const yf = new (YahooFinance as any)({
-  cookieJar: undefined,
-  fetchOptions: {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.5",
-    }
-  }
-});
+const POLYGON_API_KEY = process.env.POLYGON_API_KEY || "";
+const BASE = "https://api.polygon.io";
+
+async function polyGet(path: string, params: Record<string, string> = {}) {
+  const url = new URL(`${BASE}${path}`);
+  url.searchParams.set("apiKey", POLYGON_API_KEY);
+  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+  const res = await fetch(url.toString());
+  if (!res.ok) throw new Error(`Polygon ${path} failed: ${res.status}`);
+  return res.json();
+}
 
 export interface PricePoint {
   date: string;
@@ -77,23 +75,41 @@ export interface StockQuoteData {
 
 export type Period = "1d" | "1mo" | "3mo" | "6mo" | "1y" | "3y" | "5y";
 
-function periodToDates(period: Exclude<Period, "1d">): { from: Date; to: Date } {
+function periodToDates(period: Period): { from: string; to: string } {
   const to = new Date();
   const from = new Date();
   switch (period) {
-    case "1mo": from.setMonth(from.getMonth() - 1); break;
-    case "3mo": from.setMonth(from.getMonth() - 3); break;
-    case "6mo": from.setMonth(from.getMonth() - 6); break;
-    case "1y": from.setFullYear(from.getFullYear() - 1); break;
-    case "3y": from.setFullYear(from.getFullYear() - 3); break;
-    case "5y": from.setFullYear(from.getFullYear() - 5); break;
+    case "1d":
+      from.setDate(from.getDate() - 1);
+      break;
+    case "1mo":
+      from.setMonth(from.getMonth() - 1);
+      break;
+    case "3mo":
+      from.setMonth(from.getMonth() - 3);
+      break;
+    case "6mo":
+      from.setMonth(from.getMonth() - 6);
+      break;
+    case "1y":
+      from.setFullYear(from.getFullYear() - 1);
+      break;
+    case "3y":
+      from.setFullYear(from.getFullYear() - 3);
+      break;
+    case "5y":
+      from.setFullYear(from.getFullYear() - 5);
+      break;
   }
-  return { from, to };
+  return {
+    from: from.toISOString().split("T")[0],
+    to: to.toISOString().split("T")[0],
+  };
 }
 
 function calcMA(
   prices: PricePoint[],
-  window: number
+  window: number,
 ): { date: string; value: number | null }[] {
   return prices.map((p, i) => {
     if (i < window - 1) return { date: p.date, value: null };
@@ -105,35 +121,30 @@ function calcMA(
 
 export async function fetchStockHistory(
   ticker: string,
-  period: Period = "1y"
+  period: Period = "1y",
 ): Promise<StockHistoryResult> {
-  // 1-day uses intraday chart data (5-minute candles)
-  if (period === "1d") {
-    return fetchIntradayHistory(ticker);
-  }
-
   const { from, to } = periodToDates(period);
+  const multiplier = period === "1d" ? 5 : 1;
+  const timespan = period === "1d" ? "minute" : "day";
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const historical: any[] = await yf.historical(ticker, {
-    period1: from,
-    period2: to,
-    interval: "1d",
-  }, { validateResult: false });
+  const data = await polyGet(
+    `/v2/aggs/ticker/${ticker.toUpperCase()}/range/${multiplier}/${timespan}/${from}/${to}`,
+    { adjusted: "true", sort: "asc", limit: "5000" },
+  );
 
-  if (!historical || historical.length === 0) {
-    throw new Error(`No historical data for ${ticker}`);
-  }
+  const results = data.results ?? [];
+  if (!results.length) throw new Error(`No history for ${ticker}`);
 
-  const prices: PricePoint[] = historical.map((d) => ({
-    date: (d.date instanceof Date ? d.date : new Date(d.date))
-      .toISOString()
-      .split("T")[0],
-    open: d.open ?? 0,
-    high: d.high ?? 0,
-    low: d.low ?? 0,
-    close: d.close ?? 0,
-    volume: d.volume ?? 0,
+  const prices: PricePoint[] = results.map((r: any) => ({
+    date:
+      period === "1d"
+        ? new Date(r.t).toISOString()
+        : new Date(r.t).toISOString().split("T")[0],
+    open: r.o,
+    high: r.h,
+    low: r.l,
+    close: r.c,
+    volume: r.v,
   }));
 
   const ma50 = calcMA(prices, 50);
@@ -142,140 +153,90 @@ export async function fetchStockHistory(
   return { ticker: ticker.toUpperCase(), prices, ma50, ma200 };
 }
 
-async function fetchIntradayHistory(ticker: string): Promise<StockHistoryResult> {
-  const to = new Date();
-  const from = new Date();
-  // Go back 2 days to ensure we capture the latest trading session
-  from.setDate(from.getDate() - 2);
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const result: any = await yf.chart(ticker, {
-    period1: from,
-    period2: to,
-    interval: "5m",
-  }, { validateResult: false });
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const quotes: any[] = result?.quotes ?? [];
-
-  if (!quotes || quotes.length === 0) {
-    throw new Error(`No intraday data for ${ticker}`);
-  }
-
-  // Keep only today's session (latest trading day)
-  const latestDate = (quotes[quotes.length - 1]?.date instanceof Date
-    ? quotes[quotes.length - 1].date
-    : new Date(quotes[quotes.length - 1]?.date)
-  ).toDateString();
-
-  const todayQuotes = quotes.filter((q) => {
-    const d = q.date instanceof Date ? q.date : new Date(q.date);
-    return d.toDateString() === latestDate && q.close != null;
-  });
-
-  const prices: PricePoint[] = todayQuotes.map((q) => ({
-    date: (q.date instanceof Date ? q.date : new Date(q.date)).toISOString(),
-    open:   q.open   ?? q.close ?? 0,
-    high:   q.high   ?? q.close ?? 0,
-    low:    q.low    ?? q.close ?? 0,
-    close:  q.close  ?? 0,
-    volume: q.volume ?? 0,
-  }));
-
-  return { ticker: ticker.toUpperCase(), prices, ma50: [], ma200: [] };
-}
-
 export async function fetchQuote(ticker: string): Promise<StockQuoteData> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [quoteResult, summaryResult] = await Promise.allSettled<[any, any]>([
-    yf.quote(ticker, {}, { validateResult: false }),
-    yf.quoteSummary(ticker, {
-      modules: [
-        "assetProfile",
-        "financialData",
-        "defaultKeyStatistics",
-        "summaryDetail",
-        "earningsTrend",
-      ],
-    }, { validateResult: false }),
+  const t = ticker.toUpperCase();
+
+  const [snapResult, detailResult] = await Promise.allSettled([
+    polyGet(`/v2/snapshot/locale/us/markets/stocks/tickers/${t}`),
+    polyGet(`/v3/reference/tickers/${t}`),
   ]);
 
-  if (quoteResult.status === "rejected") {
-    throw new Error(`Ticker not found: ${ticker}`);
-  }
+  if (snapResult.status === "rejected")
+    throw new Error(`Ticker '${ticker}' not found`);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const q: any = quoteResult.value;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const summary: any =
-    summaryResult.status === "fulfilled" ? summaryResult.value : {};
+  const snap = (snapResult.value as any)?.ticker ?? {};
+  const day = snap.day ?? {};
+  const prevDay = snap.prevDay ?? {};
+  const detail =
+    detailResult.status === "fulfilled"
+      ? ((detailResult.value as any)?.results ?? {})
+      : {};
 
-  const ap = summary?.assetProfile ?? {};
-  const fd = summary?.financialData ?? {};
-  const ks = summary?.defaultKeyStatistics ?? {};
-  const sd = summary?.summaryDetail ?? {};
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const eTrends: any[] = summary?.earningsTrend?.trend ?? [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const fwd1y = eTrends.find((t: any) => t.period === "+1y");
-  const fwdEps: number | null = fwd1y?.earningsEstimate?.avg ?? null;
-  const earningsGrowthRate: number | null = fd.earningsGrowth ?? null;
-  const fwdEps2y: number | null =
-    fwdEps != null && earningsGrowthRate != null
-      ? Math.round(fwdEps * (1 + earningsGrowthRate) * 100) / 100
-      : null;
+  const currentPrice = snap.lastTrade?.p ?? day.c ?? prevDay.c ?? 0;
+  const previousClose = prevDay.c ?? currentPrice;
 
-  if (!q?.regularMarketPrice) {
-    throw new Error(`Invalid ticker: ${ticker}`);
-  }
+  if (!currentPrice) throw new Error(`Ticker '${ticker}' not found`);
 
-  logger.info({ ticker, price: q.regularMarketPrice }, "Fetched quote");
+  let ma50: number | null = null;
+  let ma200: number | null = null;
+  try {
+    const hist = await fetchStockHistory(ticker, "1y");
+    const last50 = hist.prices.slice(-50);
+    const last200 = hist.prices.slice(-200);
+    if (last50.length >= 50)
+      ma50 =
+        Math.round((last50.reduce((s, p) => s + p.close, 0) / 50) * 100) / 100;
+    if (last200.length >= 200)
+      ma200 =
+        Math.round((last200.reduce((s, p) => s + p.close, 0) / 200) * 100) /
+        100;
+  } catch {}
+
+  logger.info({ ticker: t, price: currentPrice }, "Fetched quote from Polygon");
 
   return {
-    name: q.longName ?? q.shortName ?? ticker,
-    ticker: q.symbol ?? ticker.toUpperCase(),
-    exchange: q.fullExchangeName ?? q.exchange ?? "Unknown",
-    sector: ap.sector ?? null,
-    industry: ap.industry ?? null,
-    description: ap.longBusinessSummary ?? null,
-    currency: q.currency ?? "USD",
-    marketCap: q.marketCap ?? null,
-    employees: ap.fullTimeEmployees ?? null,
-    website: ap.website ?? null,
-    country: ap.country ?? null,
-    currentPrice: q.regularMarketPrice,
-    previousClose:
-      q.regularMarketPreviousClose ?? q.regularMarketPrice,
-    week52High: q.fiftyTwoWeekHigh ?? null,
-    week52Low: q.fiftyTwoWeekLow ?? null,
-    pe: q.trailingPE ?? sd.trailingPE ?? null,
-    pb: ks.priceToBook ?? null,
-    dividendYield: sd.dividendYield ?? q.dividendYield ?? null,
-    beta: sd.beta ?? q.beta ?? null,
-    eps: q.epsTrailingTwelveMonths ?? null,
-    forwardPE: q.forwardPE ?? null,
-    priceToSales: ks.priceToSalesTrailing12Months ?? null,
-    debtToEquity: fd.debtToEquity ?? null,
-    returnOnEquity: fd.returnOnEquity ?? null,
-    profitMargin: fd.profitMargins ?? null,
-    revenueGrowth: fd.revenueGrowth ?? null,
-    earningsGrowth: fd.earningsGrowth ?? null,
-    currentRatio: fd.currentRatio ?? null,
-    avgVolume:
-      q.averageDailyVolume3Month ?? q.averageDailyVolume10Day ?? null,
-    currentVolume: q.regularMarketVolume ?? null,
-    analystRating: fd.recommendationKey ?? null,
-    targetPrice: fd.targetMeanPrice ?? null,
-    ma50: q.fiftyDayAverage ?? null,
-    ma200: q.twoHundredDayAverage ?? null,
-    bookValuePerShare: ks.bookValue ?? null,
-    evToEbitda: ks.enterpriseToEbitda ?? null,
-    targetLowPrice: fd.targetLowPrice ?? null,
-    targetHighPrice: fd.targetHighPrice ?? null,
-    targetMedianPrice: fd.targetMedianPrice ?? null,
-    numberOfAnalysts: fd.numberOfAnalystOpinions ?? null,
-    forwardEps: fwdEps,
-    forwardEps2y: fwdEps2y,
+    name: detail.name ?? t,
+    ticker: t,
+    exchange: detail.primary_exchange ?? "Unknown",
+    sector: detail.sic_description ?? null,
+    industry: detail.sic_description ?? null,
+    description: detail.description ?? null,
+    currency: "USD",
+    marketCap: detail.market_cap ?? null,
+    employees: detail.total_employees ?? null,
+    website: detail.homepage_url ?? null,
+    country: detail.locale === "us" ? "United States" : null,
+    currentPrice,
+    previousClose,
+    week52High: null,
+    week52Low: null,
+    pe: null,
+    pb: null,
+    dividendYield: null,
+    beta: null,
+    eps: null,
+    forwardPE: null,
+    priceToSales: null,
+    debtToEquity: null,
+    returnOnEquity: null,
+    profitMargin: null,
+    revenueGrowth: null,
+    earningsGrowth: null,
+    currentRatio: null,
+    avgVolume: prevDay.v ?? null,
+    currentVolume: day.v ?? null,
+    analystRating: null,
+    targetPrice: null,
+    ma50,
+    ma200,
+    bookValuePerShare: null,
+    evToEbitda: null,
+    targetLowPrice: null,
+    targetHighPrice: null,
+    targetMedianPrice: null,
+    numberOfAnalysts: null,
+    forwardEps: null,
+    forwardEps2y: null,
   };
 }
 
@@ -288,17 +249,17 @@ export interface RawNewsItem {
 
 export async function fetchStockNews(ticker: string): Promise<RawNewsItem[]> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const results: any = await yf.search(ticker, { quotesCount: 0, newsCount: 8 }, { validateResult: false });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const news: any[] = results?.news ?? [];
-    return news.slice(0, 7).map((item) => ({
+    const data = await polyGet(`/v2/reference/news`, {
+      ticker: ticker.toUpperCase(),
+      limit: "8",
+      order: "desc",
+      sort: "published_utc",
+    });
+    return (data.results ?? []).slice(0, 7).map((item: any) => ({
       headline: item.title ?? "Untitled",
-      publisher: item.publisher ?? "Unknown",
-      url: item.link ?? null,
-      publishedAt: item.providerPublishTime
-        ? new Date(item.providerPublishTime * 1000).toISOString()
-        : new Date().toISOString(),
+      publisher: item.publisher?.name ?? "Unknown",
+      url: item.article_url ?? null,
+      publishedAt: item.published_utc ?? new Date().toISOString(),
     }));
   } catch (err) {
     logger.warn({ ticker, err }, "Failed to fetch stock news");
@@ -307,28 +268,33 @@ export async function fetchStockNews(ticker: string): Promise<RawNewsItem[]> {
 }
 
 export async function searchTickers(
-  query: string
+  query: string,
 ): Promise<
-  { ticker: string; name: string; exchange: string | null; type: string | null }[]
+  {
+    ticker: string;
+    name: string;
+    exchange: string | null;
+    type: string | null;
+  }[]
 > {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const results: any = await yf.search(query, { quotesCount: 20 }, { validateResult: false });
-  const ALLOWED_TYPES = new Set(["EQUITY", "ETF", "MUTUALFUND"]);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (results?.quotes ?? [])
-    .filter((r: any) => r.symbol && (r.shortname || r.longname) && ALLOWED_TYPES.has(r.quoteType))
-    .map((r: any) => ({
-      ticker: r.symbol,
-      name: r.shortname ?? r.longname ?? r.symbol,
-      exchange: r.exchDisp ?? r.exchange ?? null,
-      type: r.quoteType ?? null,
-    }));
+  const data = await polyGet(`/v3/reference/tickers`, {
+    search: query,
+    active: "true",
+    limit: "20",
+    market: "stocks",
+  });
+  return (data.results ?? []).map((r: any) => ({
+    ticker: r.ticker,
+    name: r.name ?? r.ticker,
+    exchange: r.primary_exchange ?? null,
+    type: r.type ?? null,
+  }));
 }
 
 export function calcTrendDirection(
   price: number,
   ma50: number | null,
-  ma200: number | null
+  ma200: number | null,
 ): "uptrend" | "downtrend" | "sideways" | "unknown" {
   if (!ma50 || !ma200) return "unknown";
   if (price > ma50 && ma50 > ma200) return "uptrend";
@@ -339,7 +305,7 @@ export function calcTrendDirection(
 export function calcPerfFromHistory(
   _ticker: string,
   history1y: PricePoint[],
-  currentPrice: number
+  currentPrice: number,
 ): {
   change1w: number | null;
   change1wPct: number | null;
@@ -359,10 +325,10 @@ export function calcPerfFromHistory(
       .sort((a, b) => b.date.localeCompare(a.date));
     return sorted[0]?.close ?? null;
   }
-
-  function diff(
-    old: number | null
-  ): { change: number | null; pct: number | null } {
+  function diff(old: number | null): {
+    change: number | null;
+    pct: number | null;
+  } {
     if (!old) return { change: null, pct: null };
     const change = currentPrice - old;
     const pct = (change / old) * 100;
@@ -371,21 +337,15 @@ export function calcPerfFromHistory(
       pct: Math.round(pct * 100) / 100,
     };
   }
-
-  const d1w = diff(getHistoricalPrice(7));
-  const d1mo = diff(getHistoricalPrice(30));
-  const d6mo = diff(getHistoricalPrice(180));
-  const d1y = diff(getHistoricalPrice(365));
-
   return {
-    change1w: d1w.change,
-    change1wPct: d1w.pct,
-    change1mo: d1mo.change,
-    change1moPct: d1mo.pct,
-    change6mo: d6mo.change,
-    change6moPct: d6mo.pct,
-    change1y: d1y.change,
-    change1yPct: d1y.pct,
+    change1w: diff(getHistoricalPrice(7)).change,
+    change1wPct: diff(getHistoricalPrice(7)).pct,
+    change1mo: diff(getHistoricalPrice(30)).change,
+    change1moPct: diff(getHistoricalPrice(30)).pct,
+    change6mo: diff(getHistoricalPrice(180)).change,
+    change6moPct: diff(getHistoricalPrice(180)).pct,
+    change1y: diff(getHistoricalPrice(365)).change,
+    change1yPct: diff(getHistoricalPrice(365)).pct,
   };
 }
 
@@ -393,7 +353,7 @@ export function calcCAGR(
   history1y: PricePoint[],
   history3y: PricePoint[],
   history5y: PricePoint[],
-  currentPrice: number
+  currentPrice: number,
 ): { cagr1y: number | null; cagr3y: number | null; cagr5y: number | null } {
   function cagr(prices: PricePoint[], years: number): number | null {
     if (!prices.length) return null;
@@ -401,11 +361,10 @@ export function calcCAGR(
     if (!startPrice) return null;
     return (
       Math.round(
-        (Math.pow(currentPrice / startPrice, 1 / years) - 1) * 100 * 100
+        (Math.pow(currentPrice / startPrice, 1 / years) - 1) * 100 * 100,
       ) / 100
     );
   }
-
   return {
     cagr1y: cagr(history1y, 1),
     cagr3y: cagr(history3y, 3),
@@ -413,22 +372,18 @@ export function calcCAGR(
   };
 }
 
-export async function fetchEarningsDate(ticker: string): Promise<{ earningsDate: string | null }> {
+export async function fetchEarningsDate(
+  ticker: string,
+): Promise<{ earningsDate: string | null }> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const summary: any = await yf.quoteSummary(
-      ticker,
-      { modules: ["calendarEvents"] },
-      { validateResult: false }
-    );
-    const earnings = summary?.calendarEvents?.earnings?.earningsDate;
-    if (Array.isArray(earnings) && earnings.length > 0) {
-      const d = earnings[0];
-      if (d instanceof Date) return { earningsDate: d.toISOString() };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const raw = (d as any)?.raw;
-      if (typeof raw === "number") return { earningsDate: new Date(raw * 1000).toISOString() };
-    }
+    const data = await polyGet(`/vX/reference/financials`, {
+      ticker: ticker.toUpperCase(),
+      limit: "1",
+      timeframe: "quarterly",
+    });
+    const filing = data.results?.[0];
+    if (filing?.filing_date)
+      return { earningsDate: new Date(filing.filing_date).toISOString() };
   } catch (err) {
     logger.warn({ err, ticker }, "fetchEarningsDate failed");
   }
