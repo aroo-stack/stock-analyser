@@ -155,25 +155,36 @@ export async function fetchStockHistory(
 
 export async function fetchQuote(ticker: string): Promise<StockQuoteData> {
   const t = ticker.toUpperCase();
+  const today = new Date().toISOString().split("T")[0];
+  const threeDaysAgo = new Date(Date.now() - 86400000 * 3)
+    .toISOString()
+    .split("T")[0];
 
-  const [snapResult, detailResult] = await Promise.allSettled([
-    polyGet(`/v2/snapshot/locale/us/markets/stocks/tickers/${t}`),
+  const [detailResult, priceResult] = await Promise.allSettled([
     polyGet(`/v3/reference/tickers/${t}`),
+    polyGet(`/v2/aggs/ticker/${t}/range/1/day/${threeDaysAgo}/${today}`, {
+      adjusted: "true",
+      sort: "desc",
+      limit: "2",
+    }),
   ]);
 
-  if (snapResult.status === "rejected")
+  if (detailResult.status === "rejected")
     throw new Error(`Ticker '${ticker}' not found`);
 
-  const snap = (snapResult.value as any)?.ticker ?? {};
-  const day = snap.day ?? {};
-  const prevDay = snap.prevDay ?? {};
-  const detail =
-    detailResult.status === "fulfilled"
-      ? ((detailResult.value as any)?.results ?? {})
-      : {};
+  const detail = (detailResult.value as any)?.results ?? {};
+  if (!detail.ticker) throw new Error(`Ticker '${ticker}' not found`);
 
-  const currentPrice = snap.lastTrade?.p ?? day.c ?? prevDay.c ?? 0;
-  const previousClose = prevDay.c ?? currentPrice;
+  const priceResults =
+    priceResult.status === "fulfilled"
+      ? ((priceResult.value as any)?.results ?? [])
+      : [];
+
+  const latestBar = priceResults[0] ?? {};
+  const prevBar = priceResults[1] ?? {};
+
+  const currentPrice = latestBar.c ?? 0;
+  const previousClose = prevBar.c ?? currentPrice;
 
   if (!currentPrice) throw new Error(`Ticker '${ticker}' not found`);
 
@@ -223,8 +234,8 @@ export async function fetchQuote(ticker: string): Promise<StockQuoteData> {
     revenueGrowth: null,
     earningsGrowth: null,
     currentRatio: null,
-    avgVolume: prevDay.v ?? null,
-    currentVolume: day.v ?? null,
+    avgVolume: prevBar.v ?? null,
+    currentVolume: latestBar.v ?? null,
     analystRating: null,
     targetPrice: null,
     ma50,
